@@ -1,4 +1,4 @@
-import gleam/dynamic
+import gleam/dynamic.{type Dynamic}
 import gleam/result
 
 /// Represents an instance of the Lua VM.
@@ -11,12 +11,6 @@ pub type LuaError {
 
 /// Represents a chunk of Lua code that is already loaded into the Lua VM
 pub type Chunk
-
-/// Top-level type to represent any Lua value.
-/// This type is not precise and often needs to be decoded
-/// into another type in order to be useful.
-pub type Value =
-  dynamic.Dynamic
 
 /// Represents a Lua table.
 pub type Table
@@ -49,7 +43,7 @@ pub fn new() -> Lua
 pub fn eval(
   lua lua: Lua,
   code code: String,
-) -> Result(#(List(Value), Lua), LuaError) {
+) -> Result(#(List(Dynamic), Lua), LuaError) {
   do_eval(lua, code) |> result.map_error(parse_lua_error)
 }
 
@@ -57,7 +51,7 @@ pub fn eval(
 fn do_eval(
   lua lua: Lua,
   code code: String,
-) -> Result(#(List(Value), Lua), Value)
+) -> Result(#(List(Dynamic), Lua), Dynamic)
 
 /// Evaluates a Lua source file.
 ///
@@ -69,14 +63,17 @@ fn do_eval(
 pub fn eval_file(
   lua lua: Lua,
   path path: String,
-) -> Result(#(List(Value), Lua), LuaError) {
+) -> Result(#(List(Dynamic), Lua), LuaError) {
   do_eval_file(lua, path) |> result.map_error(parse_lua_error)
 }
 
 @external(erlang, "glua_ffi", "eval_file")
-fn do_eval_file(lua: Lua, path: String) -> Result(#(List(Value), Lua), Value)
+fn do_eval_file(
+  lua: Lua,
+  path: String,
+) -> Result(#(List(Dynamic), Lua), Dynamic)
 
 // TODO: Actual error parsing
-fn parse_lua_error(_err: Value) -> LuaError {
+fn parse_lua_error(_err: Dynamic) -> LuaError {
   UnknownError
 }
