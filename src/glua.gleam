@@ -260,6 +260,26 @@ fn do_call_function(
   args: List(a),
 ) -> Result(#(List(Dynamic), Lua), Dynamic)
 
+/// Gets a reference to the function at `keys`, then inmediatly calls it with the provided `args`.
+///
+/// This is a shorthand for `glua.get` followed by `glua.call_function`.
+///
+/// ## Examples
+///
+/// ```gleam
+/// let assert Ok(#([s], _)) = glual.call_function_by_name(glua:new(), ["string", "lower"], "HELLO FROM GLEAM!")
+/// decode.run(s, decode.string)
+/// // -> Ok(hello from gleam") 
+/// ```
+pub fn call_function_by_name(
+  lua lua: Lua,
+  keys keys: List(String),
+  args args: List(a),
+) -> Result(#(List(Dynamic), Lua), LuaError) {
+  use fun <- result.try(get(lua, keys))
+  call_function(lua, fun, args)
+}
+
 // TODO: Actual error parsing
 fn parse_lua_error(_err: Dynamic) -> LuaError {
   UnknownError
