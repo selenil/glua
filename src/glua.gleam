@@ -1,4 +1,5 @@
 import gleam/dynamic.{type Dynamic}
+import gleam/list
 import gleam/result
 
 /// Represents an instance of the Lua VM.
@@ -21,6 +22,100 @@ pub type Function
 /// Creates a new Lua VM instance
 @external(erlang, "luerl", "init")
 pub fn new() -> Lua
+
+/// Gets a value in the Lua environment.
+///
+/// ## Examples
+///
+/// ```gleam
+/// let assert Ok(lua_version) = glua.get(glua.new(), ["_Version"])
+/// decode.run(lua_version, decode.string)
+/// // -> Ok("Lua 5.3")
+/// ```
+///
+/// ```gleam
+/// let assert Ok(lua) = glua.set(glua.new(), ["my_table", "my_value"], True)
+/// let assert Ok(val) = glua.get(lua, ["my_table", "my_value"])
+/// decode.run(val, decode.bool)
+/// // -> Ok(True)
+/// ```
+///
+/// ```gleam
+/// let lua = glua.new()
+/// let assert Ok(fun) = glua.get(glua.new(), ["string", "upper"])
+/// let assert Ok(#([result], _)) = glua.call_function(lua, fun, ["hello, world!"])
+/// decode.run(val, decode.string)
+/// // -> Ok("HELLO, WORLD!")
+///
+/// ```gleam
+/// glua.get(glua.new(), ["non_existent"])
+/// // -> Error(NonExistentValue)
+/// ```
+pub fn get(lua lua: Lua, keys keys: List(String)) -> Result(Dynamic, LuaError) {
+  let #(keys, lua) = encode_list(keys, lua)
+
+  do_get(lua, keys) |> result.map_error(parse_lua_error)
+}
+
+/// Sets a value in the Lua environment.
+///
+/// All nested keys will be created as intermediate tables.
+///
+/// If successfull, this function will return the updated Lua state
+/// and the value will be available in Lua scripts.
+///
+/// ## Examples
+///
+/// ```gleam
+/// let assert Ok(lua) = glua.set(glua.new(), ["my_number"], 10)
+/// let assert Ok(n) = glua.get(lua, ["my_number"])
+/// decode.run(n, decode.int)
+/// // -> Ok(10)
+/// ```
+///
+/// ```gleam
+/// let assert Ok(lua) = glua.set(glua.new(), ["info", "emails"], ["jhondoe@example.com", "lucy@example.com"])
+/// let assert Ok(#(emails, _)) = glua.eval(lua, "return info.emails")
+/// decode.run(dynamic.list(emails), decode.list(of: decode.string))
+/// // -> Ok(["jhondoe@example.com", "lucy@example.com"])
+/// ```
+pub fn set(
+  lua lua: Lua,
+  keys keys: List(String),
+  val val: a,
+) -> Result(Lua, LuaError) {
+  let encoded = encode_list(keys, lua)
+  let state = {
+    use acc, key <- list.try_fold(encoded.0, #([], encoded.1))
+    let #(keys, lua) = acc
+    let keys = list.append(keys, [key])
+    case do_get(lua, keys) {
+      Ok(_) -> Ok(#(keys, lua))
+      _ -> {
+        let #(tbl, lua) = alloc_table([], lua)
+        case do_set(lua, keys, tbl) {
+          Ok(lua) -> Ok(#(keys, lua))
+          Error(e) -> Error(parse_lua_error(e))
+        }
+      }
+    }
+  }
+  use state <- result.try(state)
+  let #(keys, lua) = state
+  do_set(lua, keys, val) |> result.map_error(parse_lua_error)
+}
+
+@external(erlang, "luerl", "encode_list")
+fn encode_list(keys: List(String), lua: Lua) -> #(List(Dynamic), Lua)
+
+@external(erlang, "luerl_emul", "alloc_table")
+fn alloc_table(content: List(a), lua: Lua) -> #(a, Lua)
+
+@external(erlang, "glua_ffi", "get_table_keys")
+fn do_get(lua: Lua, keys: List(Dynamic)) -> Result(Dynamic, Dynamic)
+
+@external(erlang, "glua_ffi", "set_table_keys")
+fn do_set(lua: Lua, keys: List(Dynamic), val: a) -> Result(Lua, Dynamic)
 
 /// Parses a string of Lua code and returns it as a compiled chunk.
 ///
