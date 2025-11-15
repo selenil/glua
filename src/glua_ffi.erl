@@ -1,5 +1,5 @@
 -module(glua_ffi).
--export([get_table_keys/2, set_table_keys/3, load/2, load_file/2, eval/2, eval_chunk/2, eval_file/2, call_function/3]).
+-export([lua_nil/1, encode/2, get_table_keys/2, set_table_keys/3, load/2, load_file/2, eval/2, eval_chunk/2, eval_file/2, call_function/3]).
 
 %% helper to convert luerl return values to a format
 %% that is more suitable for use in Gleam code
@@ -11,6 +11,13 @@ to_gleam(Value) ->
     {error, L1, L2} -> {error, {L1, L2}};
     error -> {error, nil}
   end.
+
+lua_nil(Lua) ->
+  encode(Lua, nil).
+
+encode(Lua, Value) ->
+  {Value, Lua} = luerl:encode(Value, Lua),
+  {Lua, Value}.
 
 get_table_keys(Lua, Keys) ->
   case to_gleam(luerl:get_table_keys(Keys, Lua)) of

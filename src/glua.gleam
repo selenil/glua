@@ -1,4 +1,5 @@
 import gleam/dynamic.{type Dynamic}
+import gleam/dynamic/decode
 import gleam/list
 import gleam/result
 
@@ -13,11 +14,86 @@ pub type LuaError {
 /// Represents a chunk of Lua code that is already loaded into the Lua VM
 pub type Chunk
 
-/// Represents a Lua table.
-pub type Table
+/// Represents a value that can be passed to the Lua environment.
+pub type Value
 
-/// Represents a Lua function.
-pub type Function
+/// Represents a reference to a value inside the Lua environment.
+///
+/// Each one of the functions that returns values from the Lua environment has a `ref_` counterpart
+/// that will return references to the values instead of decoding them.
+pub type ValueRef
+
+@external(erlang, "glua_ffi", "lua_nil")
+pub fn nil(lua: Lua) -> #(Lua, Value)
+
+pub fn string(lua: Lua, v: String) -> #(Lua, Value) {
+  encode(lua, v)
+}
+
+pub fn bool(lua: Lua, v: Bool) -> #(Lua, Value) {
+  encode(lua, v)
+}
+
+pub fn int(lua: Lua, v: Int) -> #(Lua, Value) {
+  encode(lua, v)
+}
+
+pub fn float(lua: Lua, v: Float) -> #(Lua, Value) {
+  encode(lua, v)
+}
+
+pub fn table(
+  lua: Lua,
+  encoders: #(fn(Lua, a) -> #(Lua, Value), fn(Lua, b) -> #(Lua, Value)),
+  values: List(#(a, b)),
+) -> #(Lua, Value) {
+  let #(key_encoder, value_encoder) = encoders
+  let #(lua, values) =
+    list.map_fold(values, lua, fn(lua, pair) {
+      let #(lua, k) = key_encoder(lua, pair.0)
+      let #(lua, v) = value_encoder(lua, pair.1)
+      #(lua, #(k, v))
+    })
+
+  encode(lua, values)
+}
+
+pub fn table_decoder(
+  keys_decoder: decode.Decoder(a),
+  values_decoder: decode.Decoder(b),
+) -> decode.Decoder(List(#(a, b))) {
+  let inner = {
+    use key <- decode.field(0, keys_decoder)
+    use val <- decode.field(1, values_decoder)
+    decode.success(#(key, val))
+  }
+
+  decode.list(of: inner)
+}
+
+pub fn function(
+  lua: Lua,
+  v: fn(Lua, List(Dynamic)) -> #(Lua, Value),
+) -> #(Lua, Value) {
+  // wrapper to satisfy luerl's order of arguments and return value
+  let fun = fn(args, lua) {
+    let #(lua, ret) = v(lua, args)
+    #(ret, lua)
+  }
+  encode(lua, fun)
+}
+
+/// Encodes a list of values using the provided encoded function.
+pub fn list(
+  lua: Lua,
+  encoder: fn(Lua, a) -> #(Lua, Value),
+  values: List(a),
+) -> #(Lua, List(Value)) {
+  list.map_fold(values, lua, encoder)
+}
+
+@external(erlang, "glua_ffi", "encode")
+fn encode(lua: Lua, v: anything) -> #(Lua, Value)
 
 /// Creates a new Lua VM instance
 @external(erlang, "luerl", "init")
