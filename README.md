@@ -93,12 +93,12 @@ assert value == returned == "my_value"
 ```gleam
 // we can also encode a list of tuples as a table to set it in Lua
 let my_table = [
-  #("my_first_value", True),
-  #("my_second_value", False)
+  #("my_first_value", 1.2),
+  #("my_second_value", 2.1)
 ]
 
 // the function we use to encode the keys and the function we use to encode the values
-let encoders = #(glua.string, glua.bool)
+let encoders = #(glua.string, glua.float)
 
 let #(lua, encoded) = glua.new() |> glua.table(encoders, my_table)
 let assert Ok(lua) = glua.set(state: lua, keys: ["my_table"], value: encoded)
@@ -107,10 +107,10 @@ let assert Ok(lua) = glua.set(state: lua, keys: ["my_table"], value: encoded)
 let assert #(lua, [result]) = glua.eval(
   state: lua,
   code: "return my_table.my_second_value",
-  using: decode.bool
+  using: decode.float
 )
 
-assert result == False
+assert result == 2.1 
 
 // or we can get the whole table and decode it back to a list of tuples
 assert glua.get(
@@ -118,8 +118,8 @@ assert glua.get(
   keys: ["my_table"],
   using: glua.table_decoder(decode.string, decode.bool)
 ) == Ok([
-  #("my_first_value", True),
-  #("my_second_value", False)
+  #("my_first_value", 1.2),
+  #("my_second_value", 2.1)
 ])
 ```
 
