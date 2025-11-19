@@ -162,7 +162,7 @@ assert result == 20
 
 ```gleam
 let #(lua, fun) = {
-  use lua, args <- glua.function()
+  use lua, args <- glua.function(glua.new())
 
   let assert [x, min, max] = args
   let assert Ok([x, min, max]) = list.try_map(
