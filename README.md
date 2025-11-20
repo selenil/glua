@@ -136,7 +136,7 @@ let assert Ok(fun) = glua.ref_get(
 
 // we need to encode each argument we pass to a Lua function
 // `glua.list` encodes a list of values using a single encoder function
-let args = glua.list(lua, glua.int, [1, 20, 7, 18])
+let #(lua, args) = glua.list(lua, glua.int, [1, 20, 7, 18])
 
 let assert Ok(#(state, [result])) = glua.call_function(
   state: lua,
