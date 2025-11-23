@@ -128,6 +128,43 @@ fn encode(lua: Lua, v: anything) -> #(Lua, Value)
 @external(erlang, "luerl", "init")
 pub fn new() -> Lua
 
+/// List of Lua modules and functions that will be sandboxed by default
+pub const default_sandbox = [
+  ["io"],
+  ["file"],
+  ["os", "execute"],
+  ["os", "exit"],
+  ["os", "getenv"],
+  ["os", "remove"],
+  ["os", "rename"],
+  ["os", "tmpname"],
+  ["package"],
+  ["load"],
+  ["loadfile"],
+  ["require"],
+  ["dofile"],
+  ["loadstring"],
+]
+
+pub fn new_sandboxed(
+  allow excluded: List(List(String)),
+) -> Result(Lua, LuaError) {
+  list_substraction(default_sandbox, excluded)
+  |> list.try_fold(from: new(), with: sandbox)
+}
+
+@external(erlang, "erlang", "--")
+fn list_substraction(a: List(a), b: List(a)) -> List(a)
+
+pub fn sandbox(state lua: Lua, keys keys: List(String)) -> Result(Lua, LuaError) {
+  let msg = string.join(keys, with: ".") <> " is sandboxed"
+  let #(lua, fun) = encode(lua, sandbox_fun(msg))
+  set(lua, ["_G", ..keys], fun)
+}
+
+@external(erlang, "glua_ffi", "sandbox_fun")
+fn sandbox_fun(msg: String) -> Value
+
 /// Gets a value in the Lua environment.
 ///
 /// ## Examples
