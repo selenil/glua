@@ -54,6 +54,20 @@ let assert Ok(#(_state, [n, m])) = glua.eval_file(
 assert n == 1 && m == 2
 ```
 
+### Sandboxing
+
+```gleam
+let assert Ok(lua) = glua.new() |> glua.sandbox(["os", "execute"])
+let assert Error(glua.LuaRuntimeException(exception, _)) = glua.eval(
+  state: lua,
+  code: "os.execute('rm -f important_file'); return 0"
+  using: decode.int
+)
+
+// 'important_file' was not deleted
+assert exception == glua.ErrorCall(["os.execute is sandboxed"])
+```
+
 ### Getting values from Lua
 
 ```gleam
