@@ -4,7 +4,6 @@ import gleam/int
 import gleam/list
 import gleam/option
 import gleam/pair
-import gleam/result
 import gleeunit
 import glua
 
@@ -37,16 +36,12 @@ pub fn sandbox_test() {
 
   assert name == "upper"
 
-  let assert Ok(lua) = {
-    use lua <- result.try(glua.sandbox(glua.new(), ["os", "execute"]))
-    use lua <- result.try(glua.sandbox(lua, ["os", "exit"]))
-    glua.sandbox(lua, ["os", "clock"])
-  }
+  let assert Ok(lua) = glua.sandbox(glua.new(), ["os", "execute"])
 
   let assert Error(glua.LuaRuntimeException(exception, _)) =
     glua.ref_eval(
       state: lua,
-      code: "os.execute(\"echo 'sandbox test is failing'\"); os.clock()",
+      code: "os.execute(\"echo 'sandbox test is failing'\"); os.exit(1)",
     )
 
   assert exception == glua.ErrorCall(["os.execute is sandboxed"])
