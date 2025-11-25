@@ -254,7 +254,7 @@ pub fn get_private(
 
 /// Same as `glua.get`, but returns a reference to the value instead of decoding it
 pub fn ref_get(
-  lua lua: Lua,
+  state lua: Lua,
   keys keys: List(String),
 ) -> Result(ValueRef, LuaError) {
   do_ref_get(lua, keys)
