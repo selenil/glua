@@ -56,7 +56,7 @@ lua_nil(Lua) ->
     encode(Lua, nil).
 
 encode(Lua, Lst) when is_list(Lst) ->
-    %% calling `luerl:encode/2` here will try to encode each element 
+    %% calling `luerl:encode/2` here will encode each element 
     %% inside the list and it can raise if there are elements already encoded
     %% since we know that all elements were previously encoded,
     %% we instead skip the encoding step and manually allocate the table
