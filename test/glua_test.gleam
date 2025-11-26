@@ -88,6 +88,42 @@ pub fn new_sandboxed_test() {
   assert result == "LUA IS AN EMBEDDABLE LANGUAGE"
 }
 
+pub fn encoding_and_decoding_nested_tables_test() {
+  let nested_table = [
+    #("key", [#(1, [#("deeper_key", "deeper_value")])]),
+  ]
+
+  let keys = ["my_nested_table"]
+
+  let nested_table_encoders = #(glua.string, fn(lua, tbl) {
+    glua.table(
+      lua,
+      #(glua.int, fn(lua, tbl) {
+        glua.table(lua, #(glua.string, glua.string), tbl)
+      }),
+      tbl,
+    )
+  })
+
+  let nested_table_decoder =
+    glua.table_decoder(
+      decode.string,
+      glua.table_decoder(
+        decode.int,
+        glua.table_decoder(decode.string, decode.string),
+      ),
+    )
+
+  let #(lua, tbl) = glua.table(glua.new(), nested_table_encoders, nested_table)
+
+  let assert Ok(lua) = glua.set(state: lua, keys:, value: tbl)
+
+  let assert Ok(result) =
+    glua.get(state: lua, keys:, using: nested_table_decoder)
+
+  assert result == nested_table
+}
+
 pub fn get_test() {
   let state = glua.new()
 
@@ -172,7 +208,7 @@ pub fn set_test() {
       list.index_map(list.range(1, 10), fn(i, n) { #(i + 1, n) }),
     )
 
-  let assert Ok(#(_, [result])) =
+  let assert Ok(#(lua, [result])) =
     glua.call_function_by_name(
       state: lua,
       keys: ["count_odd"],
@@ -181,6 +217,43 @@ pub fn set_test() {
     )
 
   assert result == 5
+
+  let #(lua, tbl) =
+    glua.table(lua, #(glua.string, glua.function), [
+      #("is_even", fn(lua, args) {
+        let assert [arg] = args
+        let assert Ok(arg) = decode.run(arg, decode.int)
+        glua.list(lua, glua.bool, [int.is_even(arg)])
+      }),
+      #("is_odd", fn(lua, args) {
+        let assert [arg] = args
+        let assert Ok(arg) = decode.run(arg, decode.int)
+        glua.list(lua, glua.bool, [int.is_odd(arg)])
+      }),
+    ])
+
+  let #(lua, arg) = glua.int(lua, 4)
+
+  let assert Ok(lua) = glua.set(state: lua, keys: ["my_functions"], value: tbl)
+
+  let assert Ok(#(lua, [result])) =
+    glua.call_function_by_name(
+      state: lua,
+      keys: ["my_functions", "is_even"],
+      args: [arg],
+      using: decode.bool,
+    )
+
+  assert result == True
+
+  let assert Ok(#(_, [result])) =
+    glua.eval(
+      state: lua,
+      code: "return my_functions.is_odd(4)",
+      using: decode.bool,
+    )
+
+  assert result == False
 }
 
 pub fn set_lua_paths_test() {
