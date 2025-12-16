@@ -2,7 +2,7 @@
 
 -import(luerl_lib, [lua_error/2]).
 
--export([lua_nil/1, encode/2, sandbox_fun/1, get_table_keys/2, get_table_keys_dec/2,
+-export([encode/2, sandbox_fun/1, get_table_keys/2, get_table_keys_dec/2,
          get_private/2, set_table_keys/3, load/2, load_file/2, eval/2, eval_dec/2, eval_file/2,
          eval_file_dec/2, eval_chunk/2, eval_chunk_dec/2, call_function/3, call_function_dec/3]).
 
@@ -52,19 +52,16 @@ map_error({lua_error, _, State}) ->
 map_error(_) ->
     unknown_error.
 
-lua_nil(Lua) ->
-    encode(Lua, nil).
-
 encode(Lua, Lst) when is_list(Lst) ->
     %% calling `luerl:encode/2` here will encode each element 
     %% inside the list and it can raise if there are elements already encoded
     %% since we know that all elements were previously encoded,
     %% we instead skip the encoding step and manually allocate the table
     {T, State} = luerl_heap:alloc_table(Lst, Lua),
-    {State, T};
+    {ok, {State, T}};
 encode(Lua, Value) ->
     {Encoded, State} = luerl:encode(Value, Lua),
-    {State, Encoded}.
+    {ok, {State, Encoded}}.
 
 sandbox_fun(Msg) ->
     fun(_, State) -> {error, map_error(lua_error({error_call, [Msg]}, State))} end.
@@ -73,8 +70,8 @@ get_table_keys(Lua, Keys) ->
     case luerl:get_table_keys(Keys, Lua) of
         {ok, nil, _} ->
             {error, key_not_found};
-        {ok, Value, _} ->
-            {ok, Value};
+        {ok, Value, State} ->
+            {ok, {State, Value}};
         Other ->
             to_gleam(Other)
     end.
@@ -83,8 +80,8 @@ get_table_keys_dec(Lua, Keys) ->
     case luerl:get_table_keys_dec(Keys, Lua) of
         {ok, nil, _} ->
             {error, key_not_found};
-        {ok, Value, _} ->
-            {ok, Value};
+        {ok, Value, State} ->
+            {ok, {State, Value}};
         Other ->
             to_gleam(Other)
     end.
