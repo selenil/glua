@@ -19,6 +19,8 @@ pub type LuaError {
   LuaRuntimeException(exception: LuaRuntimeExceptionKind, state: Lua)
   /// A certain key was not found in the Lua environment.
   KeyNotFound
+  /// A Lua source file was not found
+  FileNotFound
   /// The value returned by the Lua environment could not be decoded using the provided decoder.
   UnexpectedResultType(List(decode.DecodeError))
   /// An error that could not be identified.
