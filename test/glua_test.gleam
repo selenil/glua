@@ -151,6 +151,35 @@ pub fn encoding_and_decoding_nested_tables_test() {
   assert result == [#("key", [#(1, [#("deeper_key", "deeper_value")])])]
 }
 
+pub type Userdata {
+  Userdata(foo: String, bar: Int)
+}
+
+pub fn userdata_test() {
+  let lua = glua.new()
+  let userdata = Userdata("my-userdata", 1)
+  let userdata_decoder = {
+    use foo <- decode.field(1, decode.string)
+    use bar <- decode.field(2, decode.int)
+    decode.success(Userdata(foo:, bar:))
+  }
+
+  let assert Ok(lua) = glua.set(lua, ["my_userdata"], glua.userdata(userdata))
+  let assert Ok(#(lua, [result])) =
+    glua.eval(lua, "return my_userdata", userdata_decoder)
+
+  assert result == userdata
+
+  let userdata = Userdata("other_userdata", 2)
+  let assert Ok(lua) =
+    glua.set(lua, ["my_other_userdata"], glua.userdata(userdata))
+  let assert Error(glua.LuaRuntimeException(glua.IllegalIndex(value, index), _)) =
+    glua.eval(lua, "return my_other_userdata.foo", decode.string)
+
+  assert value == "{usdref,1}"
+  assert index == "foo"
+}
+
 pub fn get_test() {
   let state = glua.new()
 

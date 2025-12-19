@@ -2,18 +2,27 @@
 
 -import(luerl_lib, [lua_error/2]).
 
--export([coerce/1, coerce_nil/0, wrap_fun/1, sandbox_fun/1, get_table_keys/2, get_table_keys_dec/2,
+-export([coerce/1, coerce_nil/0, coerce_userdata/1, wrap_fun/1, sandbox_fun/1, get_table_keys/2, get_table_keys_dec/2,
          get_private/2, set_table_keys/3, load/2, load_file/2, eval/2, eval_dec/2, eval_file/2,
          eval_file_dec/2, eval_chunk/2, eval_chunk_dec/2, call_function/3, call_function_dec/3]).
+
+%% turn `{userdata, Data}` into `Data` to make it more easy to decode it in Gleam
+maybe_process_userdata(Lst) when is_list(Lst) ->
+    lists:map(fun maybe_process_userdata/1, Lst);
+maybe_process_userdata({userdata, Data}) ->
+    Data;
+maybe_process_userdata(X) ->
+    X.
 
 %% helper to convert luerl return values to a format
 %% that is more suitable for use in Gleam code
 to_gleam(Value) ->
     case Value of
         {ok, Result, LuaState} ->
-            {ok, {LuaState, Result}};
+            Values = maybe_process_userdata(Result),
+            {ok, {LuaState, Values}};
         {ok, _} = Result ->
-            Result;
+            maybe_process_userdata(Result);
         {lua_error, _, _} = Error ->
             {error, map_error(Error)};
         {error, _, _} = Error ->
@@ -84,6 +93,9 @@ coerce(X) ->
 
 coerce_nil() ->
     nil.
+
+coerce_userdata(X) ->
+    {userdata, X}.
 
 wrap_fun(Fun) ->
     fun(Args, State) ->

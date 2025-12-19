@@ -96,6 +96,52 @@ pub fn list(encoder: fn(a) -> Value, values: List(a)) -> List(Value) {
   list.map(values, encoder)
 }
 
+/// Encodes any Gleam value as a reference that can be passed to a Lua program.
+///
+/// Deferencing a userdata value inside Lua code will cause a Lua exception.
+///
+/// ## Examples
+///
+/// ```gleam
+/// pub type User {
+///   User(name: String, is_admin: Bool)
+/// }
+///
+/// let user_decoder = {
+///   use name <- decode.field(1, decode.string)
+///   use is_admin <- decode.field(2, decode.bool)
+///   decode.success(User(name:, is_admin:))
+/// }
+///
+/// let state = glua.new()
+/// let assert Ok(state) = glua.set(
+///   state:,
+///   keys: ["a_user"],
+///   value: glua.userdata(User(name: "Jhon Doe", is_admin: False))
+/// )
+///
+/// let assert Ok(#(_, [result])) = glua.eval(state:, code: "return a_user", using: user_decoder)
+/// assert result == User("Jhon Doe", False)
+/// ```
+///
+/// ```gleam
+/// pub type Person {
+///   Person(name: String, email: string)
+/// }
+///
+/// let state = glua.new()
+/// let assert Ok(lua) = glua.set(
+///   state:,
+///   keys: ["lucy"],
+///   value: glua.userdata(Person(name: "Lucy", email: "lucy@example.com"))
+/// )
+///
+/// let assert Error(glua.LuaRuntimeException(glua.IllegalIndex(_), _)) =
+///   glua.eval(state:, code: "return lucy.email", using: decode.string)
+/// ```
+@external(erlang, "glua_ffi", "coerce_userdata")
+pub fn userdata(v: anything) -> Value
+
 @external(erlang, "glua_ffi", "wrap_fun")
 fn wrap_function(
   fun: fn(Lua, List(dynamic.Dynamic)) -> #(Lua, List(Value)),
