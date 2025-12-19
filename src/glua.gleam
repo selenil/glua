@@ -126,7 +126,7 @@ pub fn list(encoder: fn(a) -> Value, values: List(a)) -> List(Value) {
 ///
 /// ```gleam
 /// pub type Person {
-///   Person(name: String, email: string)
+///   Person(name: String, email: String)
 /// }
 ///
 /// let state = glua.new()
