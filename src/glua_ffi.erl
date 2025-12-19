@@ -11,8 +11,8 @@ maybe_process_userdata(Lst) when is_list(Lst) ->
     lists:map(fun maybe_process_userdata/1, Lst);
 maybe_process_userdata({userdata, Data}) ->
     Data;
-maybe_process_userdata(X) ->
-    X.
+maybe_process_userdata(Other) ->
+    Other.
 
 %% helper to convert luerl return values to a format
 %% that is more suitable for use in Gleam code
