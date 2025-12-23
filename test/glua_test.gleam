@@ -551,3 +551,22 @@ pub fn nested_function_references_test() {
     glua.call_function(state: lua, ref:, args: [arg], using: decode.float)
   assert result == 20.0
 }
+
+pub fn alloc_test() {
+  let #(lua, table) = glua.alloc(glua.new(), glua.table([]))
+  let proxy =
+    glua.function(fn(lua, _args) { #(lua, [glua.string("constant")]) })
+  let metatable = glua.table([#(glua.string("__index"), proxy)])
+  let assert Ok(#(lua, _)) =
+    glua.ref_call_function_by_name(lua, ["setmetatable"], [table, metatable])
+  let assert Ok(lua) = glua.set(lua, ["test_table"], table)
+
+  let assert Ok(#(_lua, [ret1])) =
+    glua.eval(lua, "return test_table.any_key", decode.string)
+
+  let assert Ok(#(_lua, [ret2])) =
+    glua.eval(lua, "return test_table.other_key", decode.string)
+
+  assert ret1 == "constant"
+  assert ret2 == "constant"
+}

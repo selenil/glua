@@ -147,6 +147,92 @@ fn wrap_function(
   fun: fn(Lua, List(dynamic.Dynamic)) -> #(Lua, List(Value)),
 ) -> Value
 
+/// Allocates memory in the Lua state for an encoded value.
+///
+/// Whenever you try to set an encoded value in the Lua state or pass it as an argument to a Lua function,
+/// `glua` allocates memory in the Lua state for that value automatically. This means that the same value
+/// can be allocated multiple times depending on how you use it and that multiple, distinct versions
+/// of that value could exist at runtime.
+///
+/// Consider this example:
+///
+/// ```gleam
+/// let proxy =
+///   fn(state, _) {
+///     let assert Ok(#(state, _)) =
+///       glua.ref_call_function_by_name(state:, keys: ["error"], args: [
+///         glua.string("attempt to update a read-only table"),
+///       ])
+///
+///     #(state, [])
+///   }
+///   |> glua.function
+///
+/// let state = glua.new()
+/// let table = glua.table([])
+/// let metatable = glua.table([#(glua.string("__newindex"), proxy)])
+/// let assert Ok(#(state, _)) =
+///   glua.ref_call_function_by_name(state:, keys: ["setmetatable"], args: [
+///     table,
+///     metatable,
+///   ])
+/// let assert Ok(state) = glua.set(state:, keys: ["my_table"], value: table)
+///
+/// let code =
+///   "my_table.my_key = 'this should not be the value'; return my_table.my_key"
+///
+/// glua.eval(state:, code:, using: decode.string)
+/// // -> Ok(#(_, ["this should not be the key"]))
+/// ```
+///
+/// Here we expect that a Lua exception will be raised whenever we try to set a new key in `table`,
+/// but we can still set new keys as usual. This happens because `table` is allocated twice, making the table
+/// you pass as an argument to `setmetatable` and the table you set at `my_table` two different tables at runtime.
+///
+/// There are situations where you want to allocate memory only once for a value and make sure that
+/// at runtime there is only one copy of that value. This function does exactly that.
+///
+/// We can fix our example by using `glua.alloc`:
+///
+/// ```gleam
+/// let proxy =
+///   fn(state, _) {
+///     let assert Ok(#(state, _)) =
+///       glua.ref_call_function_by_name(state:, keys: ["error"], args: [
+///         glua.string("attempt to update a read-only table"),
+///       ])
+///
+///     #(state, [])
+///   }
+///   |> glua.function
+///
+/// // we use `glua.alloc` here to avoid `table` to be allocated multiple times
+/// let #(state, table) = glua.alloc(glua.new(), glua.table([]))
+///
+/// // we can keep `metatable` as it because it is only used once
+/// let metatable = glua.table([#(glua.string("__newindex"), proxy)])
+///
+/// let assert Ok(#(state, _)) = glua.ref_call_function_by_name(
+///   state:,
+///   keys: ["setmetatable"],
+///   args: [table, metatable]
+/// )
+/// let assert Ok(state) = glua.set(state:, keys: ["my_table"], value: table)
+///
+/// let code =
+///   "my_table.my_key = 'this should not be the value'; return my_table.my_key"
+///
+/// glua.eval(state:, code:, using: decode.string)
+/// // -> Error(glua.LuaRuntimeException(glua.ErrorCall([
+///           "attempt to update a read-only table"
+///       ]), _)
+/// ```
+///
+/// > **Note**: This function should only be used to allocate memory for tables or userdata values.
+/// > For the rest of types that can be encoded, like strings, integers, floats or booleans, this function does nothing.
+@external(erlang, "glua_ffi", "alloc")
+pub fn alloc(lua: Lua, v: Value) -> #(Lua, Value)
+
 /// Creates a new Lua VM instance
 @external(erlang, "luerl", "init")
 pub fn new() -> Lua
@@ -333,7 +419,7 @@ pub fn set(
       Ok(_) -> Ok(#(keys, lua))
 
       Error(KeyNotFound) -> {
-        let #(tbl, lua) = alloc_table([], lua)
+        let #(lua, tbl) = alloc(lua, table([]))
         do_set(lua, keys, tbl)
         |> result.map(fn(lua) { #(keys, lua) })
       }
@@ -399,9 +485,6 @@ pub fn set_lua_paths(
   let paths = string.join(paths, with: ";") |> string
   set(lua, ["package", "path"], paths)
 }
-
-@external(erlang, "luerl_emul", "alloc_table")
-fn alloc_table(content: List(a), lua: Lua) -> #(a, Lua)
 
 @external(erlang, "glua_ffi", "get_table_keys_dec")
 fn do_get(lua: Lua, keys: List(String)) -> Result(dynamic.Dynamic, LuaError)

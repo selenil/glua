@@ -2,7 +2,7 @@
 
 -import(luerl_lib, [lua_error/2]).
 
--export([coerce/1, coerce_nil/0, coerce_userdata/1, wrap_fun/1, sandbox_fun/1, get_table_keys/2, get_table_keys_dec/2,
+-export([coerce/1, coerce_nil/0, coerce_userdata/1, alloc/2, wrap_fun/1, sandbox_fun/1, get_table_keys/2, get_table_keys_dec/2,
          get_private/2, set_table_keys/3, load/2, load_file/2, eval/2, eval_dec/2, eval_file/2,
          eval_file_dec/2, eval_chunk/2, eval_chunk_dec/2, call_function/3, call_function_dec/3]).
 
@@ -58,6 +58,20 @@ is_encoded({erl_mfa,_,_,_}) ->
 is_encoded(_) ->
     false.
 
+encode(X, St0) ->
+    case is_encoded(X) of
+        true -> {X, St0};
+        false -> luerl:encode(X, St0)
+    end.
+
+encode_list(L, St0) when is_list(L) ->
+    Enc = fun(X, {L1, St}) ->
+                  {Enc, St1} = encode(X, St),
+                  {[Enc | L1], St1}
+          end,
+    {L1, St1} = lists:foldl(Enc, {[], St0}, L),
+    {lists:reverse(L1), St1}.
+
 %% TODO: Improve compiler errors handling and try to detect more errors
 map_error({error, [{_, luerl_parse, Errors} | _], _}) ->
     FormattedErrors = lists:map(fun(E) -> list_to_binary(E) end, Errors),
@@ -96,6 +110,15 @@ coerce_nil() ->
 
 coerce_userdata(X) ->
     {userdata, X}.
+
+alloc(St0, Value) when is_list(Value) ->
+    {Enc, St1} = luerl_heap:alloc_table(Value, St0),
+    {St1, Enc};
+alloc(St0, {usrdef,_}=Value) ->
+    {Enc, St1} = luerl_heap:alloc_userdata(Value, St0),
+    {St1, Enc};
+alloc(St0, Other) ->
+    {St0, Other}.
 
 wrap_fun(Fun) ->
     fun(Args, State) ->
@@ -165,11 +188,11 @@ eval_file_dec(Lua, Path) ->
                  unicode:characters_to_list(Path), Lua)).
 
 call_function(Lua, Fun, Args) ->
-    {EncodedArgs, State} = luerl:encode_list(Args, Lua),
+    {EncodedArgs, State} = encode_list(Args, Lua),
     to_gleam(luerl:call(Fun, EncodedArgs, State)).
 
 call_function_dec(Lua, Fun, Args) ->
-    {EncodedArgs, St1} = luerl:encode_list(Args, Lua),
+    {EncodedArgs, St1} = encode_list(Args, Lua),
     case luerl:call(Fun, EncodedArgs, St1) of
         {ok, Ret, St2} ->
             Values = luerl:decode_list(Ret, St2),
