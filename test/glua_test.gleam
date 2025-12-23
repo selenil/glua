@@ -211,14 +211,14 @@ pub fn get_returns_proper_errors_test() {
   let state = glua.new()
 
   assert glua.get(state:, keys: ["non_existent_global"], using: decode.string)
-    == Error(glua.KeyNotFound)
+    == Error(glua.KeyNotFound(["non_existent_global"]))
 
   let encoded = glua.int(10)
   let assert Ok(state) =
     glua.set(state:, keys: ["my_table", "some_value"], value: encoded)
 
   assert glua.get(state:, keys: ["my_table", "my_val"], using: decode.int)
-    == Error(glua.KeyNotFound)
+    == Error(glua.KeyNotFound(["my_table", "my_val"]))
 }
 
 pub fn set_test() {
@@ -341,7 +341,7 @@ pub fn get_private_test() {
 
   assert glua.new()
     |> glua.get_private("non_existent", using: decode.string)
-    == Error(glua.KeyNotFound)
+    == Error(glua.KeyNotFound(["non_existent"]))
 }
 
 pub fn delete_private_test() {
@@ -352,7 +352,7 @@ pub fn delete_private_test() {
 
   assert glua.delete_private(lua, "the_value")
     |> glua.get_private(key: "the_value", using: decode.string)
-    == Error(glua.KeyNotFound)
+    == Error(glua.KeyNotFound(["the_value"]))
 }
 
 pub fn load_test() {

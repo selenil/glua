@@ -18,9 +18,9 @@ pub type LuaError {
   /// The Lua environment threw an exception during code execution.
   LuaRuntimeException(exception: LuaRuntimeExceptionKind, state: Lua)
   /// A certain key was not found in the Lua environment.
-  KeyNotFound
+  KeyNotFound(key: List(String))
   /// A Lua source file was not found
-  FileNotFound
+  FileNotFound(path: String)
   /// The value returned by the Lua environment could not be decoded using the provided decoder.
   UnexpectedResultType(List(decode.DecodeError))
   /// An error that could not be identified.
@@ -42,6 +42,60 @@ pub type LuaRuntimeExceptionKind {
   /// An exception that could not be identified
   UnknownException
 }
+
+/// Turns a `glua.LuaError` value into a human-readable string
+///
+/// ## Examples
+///
+/// ```gleam
+/// ```
+///
+/// ```gleam
+/// ```
+///
+/// ```gleam
+/// ```
+///
+/// ```gleam
+/// ```
+///
+/// ```gleam
+/// ```
+///
+pub fn format_error(err: LuaError) -> String {
+  case err {
+    LuaCompilerException(errors) ->
+      "Lua compile error: " <> string.join(errors, with: "\n")
+    LuaRuntimeException(exn, state) ->
+      "Lua runtime exception: "
+      <> format_exception(exn)
+      <> "\n\n"
+      <> format_stacktrace(state)
+
+    KeyNotFound(path) ->
+      "Key " <> "\"" <> string.join(path, with: ".") <> "\"" <> " not found"
+    FileNotFound(path) -> "File " <> "\"" <> path <> "\"" <> " not found"
+    UnexpectedResultType(decode_errors) -> ""
+    UnknownError -> "Unknow error"
+  }
+}
+
+fn format_exception(exn: LuaRuntimeExceptionKind) -> String {
+  case exn {
+    IllegalIndex(index, value) ->
+      "invalid index " <> index <> "at object " <> value
+    ErrorCall(msg) -> "error call: " <> string.join(msg, with: ", ")
+    UndefinedFunction(fun) -> ""
+    BadArith(operator, args) ->
+      "bad arithmetic expression: " <> string.join(args, " " <> operator <> " ")
+
+    AssertError(msg) -> ""
+    UnknownException -> "Unknown exception"
+  }
+}
+
+@external(erlang, "glua_ffi", "format_stacktrace")
+fn format_stacktrace(state: Lua) -> String
 
 /// The exception that happens when a functi
 /// Represents a chunk of Lua code that is already loaded into the Lua VM
@@ -237,7 +291,7 @@ fn sandbox_fun(msg: String) -> Value
 ///
 /// ```gleam
 /// glua.get(state: glua.new(), keys: ["non_existent"], using: decode.string)
-/// // -> Error(glua.KeyNotFound)
+/// // -> Error(glua.KeyNotFound(["non_existent"]))
 /// ```
 pub fn get(
   state lua: Lua,
@@ -334,7 +388,7 @@ pub fn set(
     case do_ref_get(lua, keys) {
       Ok(_) -> Ok(#(keys, lua))
 
-      Error(KeyNotFound) -> {
+      Error(KeyNotFound(_)) -> {
         let #(tbl, lua) = alloc_table([], lua)
         do_set(lua, keys, tbl)
         |> result.map(fn(lua) { #(keys, lua) })
@@ -430,7 +484,7 @@ fn do_set_private(key: String, value: a, lua: Lua) -> Lua
 ///
 /// assert glua.delete_private(lua, "my_value")
 ///        |> glua.get("my_value", decode.string)
-///   == Error(glua.KeyNotFound)
+///   == Error(glua.KeyNotFound(["my_value"]))
 /// ```
 pub fn delete_private(state lua: Lua, key key: String) -> Lua {
   do_delete_private(key, lua)
@@ -605,6 +659,15 @@ fn do_ref_eval_chunk(
 /// )
 ///
 /// assert results == ["hello, world!"]
+/// ```
+///
+/// ```gleam
+/// glua.eval_file(
+///   state: glua.new(),
+///   path: "path/to/non/existent/file",
+///   using: decode.string
+/// )
+/// //-> Error(glua.FileNotFound(["path/to/non/existent/file"]))
 /// ```
 pub fn eval_file(
   state lua: Lua,

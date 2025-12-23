@@ -1,8 +1,7 @@
 -module(glua_ffi).
-
 -import(luerl_lib, [lua_error/2]).
 
--export([coerce/1, coerce_nil/0, coerce_userdata/1, wrap_fun/1, sandbox_fun/1, get_table_keys/2, get_table_keys_dec/2,
+-export([format_stacktrace/1, coerce/1, coerce_nil/0, coerce_userdata/1, wrap_fun/1, sandbox_fun/1, get_table_keys/2, get_table_keys_dec/2,
          get_private/2, set_table_keys/3, load/2, load_file/2, eval/2, eval_dec/2, eval_file/2,
          eval_file_dec/2, eval_chunk/2, eval_chunk_dec/2, call_function/3, call_function_dec/3]).
 
@@ -67,7 +66,7 @@ map_error({error, [{_,_,enoent}], _}) ->
 map_error({lua_error, {illegal_index, Tbl, Value}, State}) ->
     FormattedTbl = list_to_binary(io_lib:format("~p", [Tbl])),
     FormattedValue = unicode:characters_to_binary(Value),
-    {lua_runtime_exception, {illegal_index, FormattedTbl, FormattedValue}, State};
+    {lua_runtime_exception, {illegal_index, FormattedTbl, FormattedValue}, State}; 
 map_error({lua_error, {error_call, _} = Error, State}) ->
     {lua_runtime_exception, Error, State};
 map_error({lua_error, {undefined_function, Value}, State}) ->
@@ -89,6 +88,10 @@ map_error({lua_error, _, State}) ->
     {lua_runtime_exception, unknown_exception, State};
 map_error(_) ->
     unknown_error.
+
+format_stacktrace(State) ->
+    Stacktrace = luerl:get_stacktrace(State),
+    <<"stacktrace"/utf8>>.
 
 coerce(X) ->
     X.
@@ -112,7 +115,7 @@ sandbox_fun(Msg) ->
 get_table_keys(Lua, Keys) ->
     case luerl:get_table_keys(Keys, Lua) of
         {ok, nil, _} ->
-            {error, key_not_found};
+            {error, {key_not_found, Keys}};
         {ok, Value, _} ->
             {ok, Value};
         Other ->
@@ -122,7 +125,7 @@ get_table_keys(Lua, Keys) ->
 get_table_keys_dec(Lua, Keys) ->
     case luerl:get_table_keys_dec(Keys, Lua) of
         {ok, nil, _} ->
-            {error, key_not_found};
+            {error, {key_not_found, Keys}};
         {ok, Value, _} ->
             {ok, Value};
         Other ->
@@ -185,5 +188,5 @@ get_private(Lua, Key) ->
         {ok, luerl:get_private(Key, Lua)}
     catch
         error:{badkey, _} ->
-            {error, key_not_found}
+            {error, {key_not_found, [Key]}}
     end.
