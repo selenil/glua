@@ -74,7 +74,8 @@ pub fn format_error(err: LuaError) -> String {
 
     KeyNotFound(path) ->
       "Key " <> "\"" <> string.join(path, with: ".") <> "\"" <> " not found"
-    FileNotFound(path) -> "File " <> "\"" <> path <> "\"" <> " not found"
+    FileNotFound(path) ->
+      "Lua source file " <> "\"" <> path <> "\"" <> " not found"
     UnexpectedResultType(decode_errors) -> ""
     UnknownError -> "Unknow error"
   }

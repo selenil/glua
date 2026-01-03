@@ -61,8 +61,6 @@ is_encoded(_) ->
 map_error({error, [{_, luerl_parse, Errors} | _], _}) ->
     FormattedErrors = lists:map(fun(E) -> list_to_binary(E) end, Errors),
     {lua_compiler_exception, FormattedErrors};
-map_error({error, [{_,_,enoent}], _}) ->
-    file_not_found;
 map_error({lua_error, {illegal_index, Tbl, Value}, State}) ->
     FormattedTbl = list_to_binary(io_lib:format("~p", [Tbl])),
     FormattedValue = unicode:characters_to_binary(Value),
@@ -144,8 +142,11 @@ load(Lua, Code) ->
                  unicode:characters_to_list(Code), Lua)).
 
 load_file(Lua, Path) ->
-    to_gleam(luerl:loadfile(
-                 unicode:characters_to_list(Path), Lua)).
+    case luerl:loadfile(unicode:characters_to_list(Path), Lua) of
+      {error, [{none, file, enoent} | _], _} ->
+        {error, {file_not_found, Path}};
+      Other -> to_gleam(Other)
+    end.
 
 eval(Lua, Code) ->
     to_gleam(luerl:do(

@@ -371,6 +371,10 @@ pub fn eval_load_file_test() {
     glua.eval_chunk(state: lua, chunk:, using: decode.string)
 
   assert result == "LUA IS AN EMBEDDABLE LANGUAGE"
+
+  let assert Error(e) =
+    glua.load_file(state: glua.new(), path: "non_existent_file")
+  assert e == glua.FileNotFound("non_existent_file")
 }
 
 pub fn eval_test() {
