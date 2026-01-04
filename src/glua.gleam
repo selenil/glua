@@ -90,7 +90,8 @@ pub fn format_error(err: LuaError) -> String {
       "Key " <> "\"" <> string.join(path, with: ".") <> "\"" <> " not found"
     FileNotFound(path) ->
       "Lua source file " <> "\"" <> path <> "\"" <> " not found"
-    UnexpectedResultType(decode_errors) -> ""
+    UnexpectedResultType(decode_errors) ->
+      list.map(decode_errors, format_decode_error) |> string.join(with: "\n")
     UnknownError -> "Unknow error"
   }
 }
@@ -125,6 +126,15 @@ fn format_exception(exn: LuaRuntimeExceptionKind) -> String {
 
 @external(erlang, "glua_ffi", "format_stacktrace")
 fn format_stacktrace(state: Lua) -> String
+
+fn format_decode_error(error: decode.DecodeError) -> String {
+  let base = "Expected " <> error.expected <> ", but found " <> error.found
+
+  case error.path {
+    [] -> base
+    path -> base <> " at " <> string.join(path, with: ".")
+  }
+}
 
 /// The exception that happens when a functi
 /// Represents a chunk of Lua code that is already loaded into the Lua VM
