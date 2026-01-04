@@ -396,10 +396,20 @@ pub fn eval_test() {
 pub fn eval_returns_proper_errors_test() {
   let state = glua.new()
 
-  assert glua.eval(state:, code: "if true then 1 + ", using: decode.int)
-    == Error(
-      glua.LuaCompilerException(messages: ["syntax error before: ", "1"]),
-    )
+  let assert Error(e) =
+    glua.eval(state:, code: "if true then 1 + ", using: decode.int)
+  assert e
+    == glua.LuaCompileFailure([
+      glua.LuaCompileError(1, glua.Parse, "syntax error before: 1"),
+    ])
+
+  let assert Error(e) =
+    glua.eval(state:, code: "print(\"hi)", using: decode.int)
+
+  assert e
+    == glua.LuaCompileFailure([
+      glua.LuaCompileError(1, glua.Tokenize, "syntax error near '\"'"),
+    ])
 
   assert glua.eval(state:, code: "return 'Hello from Lua!'", using: decode.int)
     == Error(

@@ -57,10 +57,8 @@ is_encoded({erl_mfa,_,_,_}) ->
 is_encoded(_) ->
     false.
 
-%% TODO: Improve compiler errors handling and try to detect more errors
-map_error({error, [{_, luerl_parse, Errors} | _], _}) ->
-    FormattedErrors = lists:map(fun(E) -> list_to_binary(E) end, Errors),
-    {lua_compiler_exception, FormattedErrors};
+map_error({error, Errors, _}) ->
+    {lua_compile_failure, lists:map(fun map_compile_error/1, Errors)};
 map_error({lua_error, {illegal_index, Tbl, Value}, State}) ->
     FormattedTbl = list_to_binary(io_lib:format("~p", [Tbl])),
     FormattedValue = unicode:characters_to_binary(Value),
@@ -86,6 +84,17 @@ map_error({lua_error, _, State}) ->
     {lua_runtime_exception, unknown_exception, State};
 map_error(_) ->
     unknown_error.
+
+map_compile_error({Line, Type, {user, Messages}}) ->
+    map_compile_error({Line, Type, Messages});
+map_compile_error({Line, Type, {illegal, Token}}) ->
+    map_compile_error({Line, Type, io_lib:format("~p ~p",["Illegal token",Token])});
+map_compile_error({Line, Type, Messages}) ->
+    Kind = case Type of
+        luerl_parse -> parse;
+        luerl_scan -> tokenize
+    end,
+    {lua_compile_error, Line, Kind, unicode:characters_to_binary(Messages)}.
 
 format_stacktrace(State) ->
     Stacktrace = luerl:get_stacktrace(State),

@@ -4,6 +4,7 @@
 
 import gleam/dynamic
 import gleam/dynamic/decode
+import gleam/int
 import gleam/list
 import gleam/result
 import gleam/string
@@ -13,8 +14,8 @@ pub type Lua
 
 /// Represents the errors than can happend during the parsing and execution of Lua code
 pub type LuaError {
-  /// There was an exception when compiling the Lua code.
-  LuaCompilerException(messages: List(String))
+  /// The compilation process of the Lua code failed because of the presence of one or more compile errors.
+  LuaCompileFailure(errors: List(LuaCompileError))
   /// The Lua environment threw an exception during code execution.
   LuaRuntimeException(exception: LuaRuntimeExceptionKind, state: Lua)
   /// A certain key was not found in the Lua environment.
@@ -25,6 +26,17 @@ pub type LuaError {
   UnexpectedResultType(List(decode.DecodeError))
   /// An error that could not be identified.
   UnknownError
+}
+
+/// Represents a Lua compilation error
+pub type LuaCompileError {
+  LuaCompileError(line: Int, kind: LuaCompileErrorKind, message: String)
+}
+
+/// Represents the kind of a Lua compilation error
+pub type LuaCompileErrorKind {
+  Parse
+  Tokenize
 }
 
 /// Represents the kind of exceptions that can happen at runtime during Lua code execution.
@@ -64,8 +76,10 @@ pub type LuaRuntimeExceptionKind {
 ///
 pub fn format_error(err: LuaError) -> String {
   case err {
-    LuaCompilerException(errors) ->
-      "Lua compile error: " <> string.join(errors, with: "\n")
+    LuaCompileFailure(errors) ->
+      "Lua compile error: "
+      <> "\n\n"
+      <> string.join(list.map(errors, format_compile_error), with: "\n")
     LuaRuntimeException(exn, state) ->
       "Lua runtime exception: "
       <> format_exception(exn)
@@ -79,6 +93,20 @@ pub fn format_error(err: LuaError) -> String {
     UnexpectedResultType(decode_errors) -> ""
     UnknownError -> "Unknow error"
   }
+}
+
+fn format_compile_error(error: LuaCompileError) -> String {
+  let kind = case error.kind {
+    Parse -> "parse"
+    Tokenize -> "tokenize"
+  }
+
+  "Failed to "
+  <> kind
+  <> ": error on line "
+  <> int.to_string(error.line)
+  <> ": "
+  <> error.message
 }
 
 fn format_exception(exn: LuaRuntimeExceptionKind) -> String {
