@@ -83,12 +83,15 @@ pub fn format_error(error: LuaError) -> String {
       "Lua compile error: "
       <> "\n\n"
       <> string.join(list.map(errors, format_compile_error), with: "\n")
-    LuaRuntimeException(exception, state) ->
-      "Lua runtime exception: "
-      <> format_exception(exception)
-      <> "\n\n"
-      <> format_stacktrace(state)
+    LuaRuntimeException(exception, state) -> {
+      let base = "Lua runtime exception: " <> format_exception(exception)
+      let stacktrace = format_stacktrace(state)
 
+      case stacktrace {
+        "" -> base
+        stacktrace -> base <> "\n\n" <> stacktrace
+      }
+    }
     KeyNotFound(path) ->
       "Key " <> "\"" <> string.join(path, with: ".") <> "\"" <> " not found"
     FileNotFound(path) ->

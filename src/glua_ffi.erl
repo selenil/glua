@@ -103,8 +103,8 @@ map_compile_error({Line, Type, Messages}) ->
     {lua_compile_error, Line, Kind, unicode:characters_to_binary(Messages)}.
 
 format_stacktrace(State) ->
-    Stacktrace = luerl:get_stacktrace(State),
-    <<"stacktrace"/utf8>>.
+    %% Stacktrace = luerl:get_stacktrace(State),
+    <<""/utf8>>.
 
 coerce(X) ->
     X.

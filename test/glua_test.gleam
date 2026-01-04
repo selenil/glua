@@ -587,3 +587,36 @@ pub fn nested_function_references_test() {
     glua.call_function(state: lua, ref:, args: [arg], using: decode.float)
   assert result == 20.0
 }
+
+pub fn format_error_test() {
+  let state = glua.new()
+
+  let assert Error(e) = glua.ref_eval(state:, code: "1 +")
+  assert glua.format_error(e)
+    == "Lua compile error: \n\nFailed to parse: error on line 1: syntax error before: 1"
+
+  let assert Error(e) = glua.ref_eval(state:, code: "error('an error')")
+  assert glua.format_error(e) == "Lua runtime exception: error call: an error"
+
+  let assert Error(e) =
+    glua.ref_eval(state:, code: "local a = true; local b = 1 * a")
+  assert glua.format_error(e)
+    == "Lua runtime exception: Bad arithmetic expression: 1 * true"
+
+  let assert Error(e) =
+    glua.ref_eval(state:, code: "assert(false, 'assertion message')")
+  assert glua.format_error(e)
+    == "Lua runtime exception: Assertion failed with message: assertion message"
+
+  let assert Error(e) =
+    glua.get(state:, keys: ["non_existent"], using: decode.string)
+  assert glua.format_error(e) == "Key \"non_existent\" not found"
+
+  let assert Error(e) = glua.load_file(state:, path: "non_existent_file")
+  assert glua.format_error(e)
+    == "Lua source file \"non_existent_file\" not found"
+
+  let assert Error(e) =
+    glua.eval(state:, code: "return 1 + 1", using: decode.string)
+  assert glua.format_error(e) == "Expected String, but found Int"
+}
