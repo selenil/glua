@@ -75,8 +75,8 @@ pub type LuaRuntimeExceptionKind {
 /// ```gleam
 /// ```
 ///
-pub fn format_error(err: LuaError) -> String {
-  case err {
+pub fn format_error(error: LuaError) -> String {
+  case error {
     LuaCompileFailure(errors) ->
       "Lua compile error: "
       <> "\n\n"
