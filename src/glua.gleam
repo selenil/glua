@@ -48,6 +48,8 @@ pub type LuaRuntimeExceptionKind {
   ErrorCall(message: String, level: option.Option(Int))
   /// The exception that happens when trying to call a function that is not defined.
   UndefinedFunction(value: String)
+  /// The exception that happens when trying to call a method that is not defined for an object.
+  UndefinedMethod(object: String, method: String)
   /// The exception that happens when an invalid arithmetic operation is performed.
   BadArith(operator: String, args: List(String))
   /// The exception that happens when a call to assert is made passing a value that evalues to `false` as the first argument.
@@ -132,6 +134,15 @@ fn format_exception(exception: LuaRuntimeExceptionKind) -> String {
     }
 
     UndefinedFunction(fun) -> "Undefined function: " <> fun
+    UndefinedMethod(obj, method) ->
+      "Undefined method "
+      <> "\""
+      <> method
+      <> "\""
+      <> " for object: "
+      <> "\""
+      <> obj
+      <> "\""
     BadArith(operator, args) ->
       "Bad arithmetic expression: "
       <> string.join(args, with: " " <> operator <> " ")

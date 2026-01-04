@@ -72,6 +72,9 @@ map_error({lua_error, {error_call, Args}, State}) ->
 map_error({lua_error, {undefined_function, Value}, State}) ->
     {lua_runtime_exception,
      {undefined_function, unicode:characters_to_binary(io_lib:format("~p",[Value]))}, State};
+map_error({lua_error, {undefined_method, Obj, Value}, State}) ->
+    {lua_runtime_exception,
+     {undefined_method, unicode:characters_to_binary(io_lib:format("~p", [Obj])), Value}, State};
 map_error({lua_error, {badarith, Operator, Args}, State}) ->
     FormattedOperator = unicode:characters_to_binary(atom_to_list(Operator)),
     FormattedArgs =
