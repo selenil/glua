@@ -27,7 +27,7 @@ to_gleam(Value) ->
         {error, _, _} = Error ->
             {error, map_error(Error)};
         error ->
-            {error, unknown_error}
+            {error, {unknown_error, nil}}
     end.
 
 %% helper to determine if a value is encoded or not
@@ -82,8 +82,8 @@ map_error({lua_error, {assert_error, _} = Error, State}) ->
     {lua_runtime_exception, Error, State};
 map_error({lua_error, _, State}) ->
     {lua_runtime_exception, unknown_exception, State};
-map_error(_) ->
-    unknown_error.
+map_error(Error) ->
+   {unknown_error, Error}.
 
 map_compile_error({Line, Type, {user, Messages}}) ->
     map_compile_error({Line, Type, Messages});

@@ -25,7 +25,7 @@ pub type LuaError {
   /// The value returned by the Lua environment could not be decoded using the provided decoder.
   UnexpectedResultType(List(decode.DecodeError))
   /// An error that could not be identified.
-  UnknownError
+  UnknownError(error: dynamic.Dynamic)
 }
 
 /// Represents a Lua compilation error
@@ -92,7 +92,7 @@ pub fn format_error(err: LuaError) -> String {
       "Lua source file " <> "\"" <> path <> "\"" <> " not found"
     UnexpectedResultType(decode_errors) ->
       list.map(decode_errors, format_decode_error) |> string.join(with: "\n")
-    UnknownError -> "Unknow error"
+    UnknownError(error) -> "Unknown error: " <> format_unknown_error(error)
   }
 }
 
@@ -135,6 +135,9 @@ fn format_decode_error(error: decode.DecodeError) -> String {
     path -> base <> " at " <> string.join(path, with: ".")
   }
 }
+
+@external(erlang, "luerl_lib", "format_error")
+fn format_unknown_error(error: dynamic.Dynamic) -> String
 
 /// The exception that happens when a functi
 /// Represents a chunk of Lua code that is already loaded into the Lua VM
