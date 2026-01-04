@@ -53,18 +53,18 @@ pub fn sandbox_test() {
       using: decode.int,
     )
 
-  assert exception == glua.ErrorCall(["math.max is sandboxed"])
+  assert exception == glua.ErrorCall("math.max is sandboxed", option.None)
 
   let assert Ok(lua) = glua.sandbox(glua.new(), ["string"])
 
-  let assert Error(glua.LuaRuntimeException(glua.IllegalIndex(_, name), _)) =
+  let assert Error(glua.LuaRuntimeException(glua.IllegalIndex(index, _), _)) =
     glua.eval(
       state: lua,
       code: "return string.upper('my_string')",
       using: decode.string,
     )
 
-  assert name == "upper"
+  assert index == "upper"
 
   let assert Ok(lua) = glua.sandbox(glua.new(), ["os", "execute"])
 
@@ -74,7 +74,7 @@ pub fn sandbox_test() {
       code: "os.execute(\"echo 'sandbox test is failing'\"); os.exit(1)",
     )
 
-  assert exception == glua.ErrorCall(["os.execute is sandboxed"])
+  assert exception == glua.ErrorCall("os.execute is sandboxed", option.None)
 
   let assert Ok(lua) = glua.sandbox(glua.new(), ["print"])
   let arg = glua.string("sandbox test is failing")
@@ -86,7 +86,7 @@ pub fn sandbox_test() {
       using: decode.string,
     )
 
-  assert exception == glua.ErrorCall(["print is sandboxed"])
+  assert exception == glua.ErrorCall("print is sandboxed", option.None)
 }
 
 pub fn new_sandboxed_test() {
@@ -95,18 +95,18 @@ pub fn new_sandboxed_test() {
   let assert Error(glua.LuaRuntimeException(exception, _)) =
     glua.ref_eval(state: lua, code: "return load(\"return 1\")")
 
-  assert exception == glua.ErrorCall(["load is sandboxed"])
+  assert exception == glua.ErrorCall("load is sandboxed", option.None)
 
   let arg = glua.int(1)
   let assert Error(glua.LuaRuntimeException(exception, _)) =
     glua.ref_call_function_by_name(state: lua, keys: ["os", "exit"], args: [arg])
 
-  assert exception == glua.ErrorCall(["os.exit is sandboxed"])
+  assert exception == glua.ErrorCall("os.exit is sandboxed", option.None)
 
-  let assert Error(glua.LuaRuntimeException(glua.IllegalIndex(_, name), _)) =
+  let assert Error(glua.LuaRuntimeException(glua.IllegalIndex(index, _), _)) =
     glua.ref_eval(state: lua, code: "io.write('some_message')")
 
-  assert name == "write"
+  assert index == "write"
 
   let assert Ok(lua) = glua.new_sandboxed([["package"], ["require"]])
   let assert Ok(lua) = glua.set_lua_paths(lua, paths: ["./test/lua/?.lua"])
@@ -173,10 +173,9 @@ pub fn userdata_test() {
   let userdata = Userdata("other_userdata", 2)
   let assert Ok(lua) =
     glua.set(lua, ["my_other_userdata"], glua.userdata(userdata))
-  let assert Error(glua.LuaRuntimeException(glua.IllegalIndex(value, index), _)) =
+  let assert Error(glua.LuaRuntimeException(glua.IllegalIndex(index, _), _)) =
     glua.eval(lua, "return my_other_userdata.foo", decode.string)
 
-  assert value == "{usdref,1}"
   assert index == "foo"
 }
 
@@ -425,11 +424,21 @@ pub fn eval_returns_proper_errors_test() {
   assert index == "b"
 
   let assert Error(glua.LuaRuntimeException(
-    exception: glua.ErrorCall(messages:),
+    exception: glua.ErrorCall(message, level),
     state: _,
   )) = glua.eval(state:, code: "error('error message')", using: decode.int)
 
-  assert messages == ["error message"]
+  assert message == "error message"
+  assert level == option.None
+
+  let assert Error(glua.LuaRuntimeException(
+    exception: glua.ErrorCall(message, level),
+    state: _,
+  )) =
+    glua.eval(state:, code: "error('error with level', 1)", using: decode.int)
+
+  assert message == "error with level"
+  assert level == option.Some(1)
 
   let assert Error(glua.LuaRuntimeException(
     exception: glua.UndefinedFunction(value:),

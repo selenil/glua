@@ -6,6 +6,7 @@ import gleam/dynamic
 import gleam/dynamic/decode
 import gleam/int
 import gleam/list
+import gleam/option
 import gleam/result
 import gleam/string
 
@@ -42,9 +43,9 @@ pub type LuaCompileErrorKind {
 /// Represents the kind of exceptions that can happen at runtime during Lua code execution.
 pub type LuaRuntimeExceptionKind {
   /// The exception that happens when trying to access an index that does not exists on a table (also happens when indexing non-table values).
-  IllegalIndex(value: String, index: String)
+  IllegalIndex(index: String, value: String)
   /// The exception that happens when the `error` function is called.
-  ErrorCall(messages: List(String))
+  ErrorCall(message: String, level: option.Option(Int))
   /// The exception that happens when trying to call a function that is not defined.
   UndefinedFunction(value: String)
   /// The exception that happens when an invalid arithmetic operation is performed.
@@ -80,9 +81,9 @@ pub fn format_error(err: LuaError) -> String {
       "Lua compile error: "
       <> "\n\n"
       <> string.join(list.map(errors, format_compile_error), with: "\n")
-    LuaRuntimeException(exn, state) ->
+    LuaRuntimeException(exception, state) ->
       "Lua runtime exception: "
-      <> format_exception(exn)
+      <> format_exception(exception)
       <> "\n\n"
       <> format_stacktrace(state)
 
@@ -110,16 +111,32 @@ fn format_compile_error(error: LuaCompileError) -> String {
   <> error.message
 }
 
-fn format_exception(exn: LuaRuntimeExceptionKind) -> String {
-  case exn {
+fn format_exception(exception: LuaRuntimeExceptionKind) -> String {
+  case exception {
     IllegalIndex(index, value) ->
-      "invalid index " <> index <> "at object " <> value
-    ErrorCall(msg) -> "error call: " <> string.join(msg, with: ", ")
-    UndefinedFunction(fun) -> ""
-    BadArith(operator, args) ->
-      "bad arithmetic expression: " <> string.join(args, " " <> operator <> " ")
+      "Invalid index "
+      <> "\""
+      <> index
+      <> "\""
+      <> " at object "
+      <> "\""
+      <> value
+      <> "\""
+    ErrorCall(msg, level) -> {
+      let base = "error call: " <> msg
 
-    AssertError(msg) -> ""
+      case level {
+        option.Some(level) -> base <> " at level " <> int.to_string(level)
+        option.None -> base
+      }
+    }
+
+    UndefinedFunction(fun) -> "Undefined function: " <> fun
+    BadArith(operator, args) ->
+      "Bad arithmetic expression: "
+      <> string.join(args, with: " " <> operator <> " ")
+
+    AssertError(msg) -> "Assertion failed with message: " <> msg
     UnknownException -> "Unknown exception"
   }
 }

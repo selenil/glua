@@ -59,16 +59,19 @@ is_encoded(_) ->
 
 map_error({error, Errors, _}) ->
     {lua_compile_failure, lists:map(fun map_compile_error/1, Errors)};
-map_error({lua_error, {illegal_index, Tbl, Value}, State}) ->
-    FormattedTbl = list_to_binary(io_lib:format("~p", [Tbl])),
-    FormattedValue = unicode:characters_to_binary(Value),
-    {lua_runtime_exception, {illegal_index, FormattedTbl, FormattedValue}, State}; 
-map_error({lua_error, {error_call, _} = Error, State}) ->
+map_error({lua_error, {illegal_index, Value, Index}, State}) ->
+    FormattedIndex = unicode:characters_to_binary(Index),
+    FormattedValue = unicode:characters_to_binary(io_lib:format("~p",[luerl:decode(Value, State)])),
+    {lua_runtime_exception, {illegal_index, FormattedIndex, FormattedValue}, State}; 
+map_error({lua_error, {error_call, Args}, State}) ->
+    Error = case Args of
+              [Msg, Level] when is_binary(Msg) andalso is_integer(Level) -> {error_call, Msg, {some, Level}};
+              [Msg] when is_binary(Msg) -> {error_call, Msg, none}
+           end,
     {lua_runtime_exception, Error, State};
 map_error({lua_error, {undefined_function, Value}, State}) ->
     {lua_runtime_exception,
-     {undefined_function, list_to_binary(io_lib:format("~p", [Value]))},
-     State};
+     {undefined_function, unicode:characters_to_binary(io_lib:format("~p",[Value]))}, State};
 map_error({lua_error, {badarith, Operator, Args}, State}) ->
     FormattedOperator = unicode:characters_to_binary(atom_to_list(Operator)),
     FormattedArgs =
