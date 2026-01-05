@@ -63,20 +63,59 @@ pub type LuaRuntimeExceptionKind {
 /// ## Examples
 ///
 /// ```gleam
+/// let assert Error(e) = glua.eval(
+///   state: glua.new(),
+///   code: "if true end",
+///   using: decode.string
+/// )
+///
+/// glua.format_error(e)
+/// // -> "Lua compile error: \n\nFailed to parse: error on line 1: syntax error before: 'end'"
 /// ```
 ///
 /// ```gleam
+/// let assert Error(e) = glua.eval(
+///   state: glua.new(),
+///   code: "local a = 1; local b = true; return a + b",
+///   using: decode.string
+/// )
+///
+/// glua.format_error(e)
+/// // -> "Lua runtime exception: Bad arithmetic expression: 1 + true"
 /// ```
 ///
 /// ```gleam
+/// let assert Error(e) = glua.get(
+///   state: glua.new(),
+///   keys: ["a_value"],
+///   using: decode.string
+/// )
+/// 
+/// glua.format_error(e)
+/// // -> "Key \"a_value\" not found"
 /// ```
 ///
 /// ```gleam
+/// let assert Error(e) = glua.eval_file(
+///   state: glua.new(),
+///   path: "my_lua_file.lua",
+///   using: decode.string
+/// )
+///
+/// glua.format_error(e)
+/// // -> "Lua source file \"my_lua_file.lua\" not found"
 /// ```
 ///
 /// ```gleam
-/// ```
+/// let assert Error(e) = glua.eval(
+///   state: glua.new(),
+///   code: "return 1 + 1",
+///   using: decode.string
+/// )
 ///
+/// glua.format_error(e)
+/// // -> "Expected String, but found Int"
+/// ```
 pub fn format_error(error: LuaError) -> String {
   case error {
     LuaCompileFailure(errors) ->
