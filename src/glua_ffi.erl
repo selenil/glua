@@ -102,9 +102,68 @@ map_compile_error({Line, Type, Messages}) ->
     end,
     {lua_compile_error, Line, Kind, unicode:characters_to_binary(Messages)}.
 
+%% retrieves the stacktraces for a given state
+%% and returns it in a pretty-string
+%% borrowed from: https://github.com/tv-labs/lua
 format_stacktrace(State) ->
-    %% Stacktrace = luerl:get_stacktrace(State),
-    <<""/utf8>>.
+    Stacktrace = luerl:get_stacktrace(State),
+    [_ | Rest] = Stacktrace,
+    Zipped = gleam@list:zip(Stacktrace, Rest),
+    Lines = lists:map(
+        fun
+            ({{Func, [{tref, _} = Tref | Args], _}, {_, _, Context}}) ->
+                Keys = lists:map(
+                    fun({K, _}) -> io_lib:format("~p", [K]) end,
+                    luerl:decode(Tref, State)
+                ),
+                FormattedArgs = format_args(Args),
+                io_lib:format(
+                    "~p with arguments ~s\n"
+                    "^--- self is incorrect for object with keys ~s\n\n\n"
+                    "Line ~p",
+                    [
+                        Func,
+                        FormattedArgs,
+                        lists:join(", ", Keys),
+                        proplists:get_value(line, Context)
+                    ]
+                );
+            ({{Func, Args, _}, {_, _, Context}}) ->
+                FormattedArgs = format_args(Args),
+                Name =
+                    case Func of
+                        nil ->
+                            " <unknown function>" ++ FormattedArgs;
+                        "-no-name-" ->
+                            "";
+                        {luerl_lib_basic, basic_error} ->
+                            "error" ++ FormattedArgs;
+                        {luerl_lib_basic, basic_error, undefined} ->
+                            "error" ++ FormattedArgs;
+                        {luerl_lib_basic, error_call, undefined} ->
+                            "error" ++ FormattedArgs;
+                        {luerl_lib_basic, assert, undefined} ->
+                            "assert" ++ FormattedArgs;
+                        _ ->
+                            N =
+                                case Func of
+                                    {tref, _} -> "<reference>";
+                                    _ -> Func
+                                end,
+                            " " ++ N ++ FormattedArgs
+                    end,
+                io_lib:format("Line ~p: ~s", [
+                    proplists:get_value(line, Context),
+                    Name
+                ])
+        end,
+        Zipped
+    ),
+    unicode:characters_to_binary(lists:join("\n", Lines)).
+
+%% borrowed from: https://github.com/tv-labs/lua
+format_args(Args) ->
+  ["(", lists:join(", ", lists:map(fun(A) -> io_lib:format("~p",[A]) end, Args)), ")"].
 
 coerce(X) ->
     X.
