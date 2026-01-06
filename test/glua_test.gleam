@@ -453,11 +453,11 @@ pub fn eval_returns_proper_errors_test() {
   )) =
     glua.eval(
       state:,
-      code: "return io:write('something')",
+      code: "local i = function(x) return x end; i:call(1)",
       using: decode.string,
     )
 
-  assert method == "write"
+  assert method == "call"
 
   let assert Error(glua.LuaRuntimeException(
     exception: glua.BadArith(operator:, args:),
