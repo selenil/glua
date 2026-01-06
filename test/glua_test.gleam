@@ -440,6 +440,8 @@ pub fn eval_returns_proper_errors_test() {
   assert message == "error with level"
   assert level == option.Some(1)
 
+  let assert Error(_) = glua.eval(state:, code: "error({1})", using: decode.int)
+
   let assert Error(glua.LuaRuntimeException(
     exception: glua.UndefinedFunction(value:),
     state: _,
@@ -478,6 +480,9 @@ pub fn eval_returns_proper_errors_test() {
     )
 
   assert message == "assertion failed"
+
+  let assert Error(_) =
+    glua.eval(state:, code: "assert(false, {1})", using: decode.int)
 }
 
 pub fn eval_file_test() {

@@ -64,11 +64,16 @@ map_error({lua_error, {illegal_index, Value, Index}, State}) ->
     FormattedValue = unicode:characters_to_binary(io_lib:format("~p",[luerl:decode(Value, State)])),
     {lua_runtime_exception, {illegal_index, FormattedIndex, FormattedValue}, State}; 
 map_error({lua_error, {error_call, Args}, State}) ->
-    Error = case Args of
-              [Msg, Level] when is_binary(Msg) andalso is_integer(Level) -> {error_call, Msg, {some, Level}};
-              [Msg] when is_binary(Msg) -> {error_call, Msg, none}
-           end,
-    {lua_runtime_exception, Error, State};
+    case Args of
+        [Msg, Level] when is_binary(Msg) andalso is_integer(Level) ->
+            {lua_runtime_exception, {error_call, Msg, {some, Level}}, State};
+        [Msg] when is_binary(Msg) ->
+            {lua_runtime_exception, {error_call, Msg, none}, State};
+
+        % error() was called with incorrect arguments
+        _ ->
+            {unknown_error, {error_call, Args}}
+    end;
 map_error({lua_error, {undefined_function, Value}, State}) ->
     {lua_runtime_exception,
      {undefined_function, unicode:characters_to_binary(io_lib:format("~p",[Value]))}, State};
@@ -84,8 +89,15 @@ map_error({lua_error, {badarith, Operator, Args}, State}) ->
                   end,
                   Args),
     {lua_runtime_exception, {bad_arith, FormattedOperator, FormattedArgs}, State};
-map_error({lua_error, {assert_error, _} = Error, State}) ->
-    {lua_runtime_exception, Error, State};
+map_error({lua_error, {assert_error, Msg} = Error, State}) ->
+    case Msg of
+        M when is_binary(M) ->
+            {lua_runtime_exception, Error, State};
+
+        % assert() was called with incorrect arguments
+        _ ->
+            {unknown_error, Error}
+    end;
 map_error({lua_error, _, State}) ->
     {lua_runtime_exception, unknown_exception, State};
 map_error(Error) ->
