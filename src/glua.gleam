@@ -53,7 +53,7 @@ pub type LuaRuntimeExceptionKind {
   /// The exception that happens when an invalid arithmetic operation is performed.
   BadArith(operator: String, args: List(String))
   /// The exception that happens when a function is called with incorrect arguments.
-  Badarg(function: String, args: List(String))
+  Badarg(function: String, args: List(dynamic.Dynamic))
   /// The exception that happens when a call to assert is made passing a value that evalues to `false` as the first argument.
   AssertError(message: String)
   /// An exception that could not be identified
