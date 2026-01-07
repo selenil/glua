@@ -167,7 +167,7 @@ fn format_exception(exception: LuaRuntimeExceptionKind) -> String {
       <> value
       <> "\""
     ErrorCall(msg, level) -> {
-      let base = "error call: " <> msg
+      let base = "Error call: " <> msg
 
       case level {
         option.Some(level) -> base <> " at level " <> int.to_string(level)

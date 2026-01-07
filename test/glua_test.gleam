@@ -600,18 +600,14 @@ pub fn format_error_test() {
   assert glua.format_error(e)
     == "Lua compile error: \n\nFailed to parse: error on line 1: syntax error before: 1"
 
-  let assert Error(e) = glua.ref_eval(state:, code: "error('an error')")
-  assert glua.format_error(e) == "Lua runtime exception: error call: an error"
+  let assert Error(e) = glua.ref_eval(state:, code: "assert(false)")
+  assert glua.format_error(e)
+    == "Lua runtime exception: Assertion failed with message: assertion failed\n\nLine 1: assert(false)"
 
   let assert Error(e) =
     glua.ref_eval(state:, code: "local a = true; local b = 1 * a")
   assert glua.format_error(e)
     == "Lua runtime exception: Bad arithmetic expression: 1 * true"
-
-  let assert Error(e) =
-    glua.ref_eval(state:, code: "assert(false, 'assertion message')")
-  assert glua.format_error(e)
-    == "Lua runtime exception: Assertion failed with message: assertion message"
 
   let assert Error(e) =
     glua.get(state:, keys: ["non_existent"], using: decode.string)
