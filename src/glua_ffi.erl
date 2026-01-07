@@ -152,7 +152,7 @@ format_stacktrace(State, [_ | Rest] = Stacktrace) ->
                 Name =
                     case Func of
                         nil ->
-                            " <unknown function>" ++ FormattedArgs;
+                            "<unknown function>" ++ FormattedArgs;
                         "-no-name-" ->
                             "";
                         {luerl_lib_basic, basic_error} ->
@@ -169,7 +169,7 @@ format_stacktrace(State, [_ | Rest] = Stacktrace) ->
                                     {tref, _} -> "<reference>";
                                     _ -> Func
                                 end,
-                            " " ++ N ++ FormattedArgs
+                            io_lib:format("~p~s", [N, FormattedArgs])
                     end,
                 io_lib:format("Line ~p: ~s", [
                     proplists:get_value(line, Context),
@@ -182,7 +182,7 @@ format_stacktrace(State, [_ | Rest] = Stacktrace) ->
 
 %% borrowed from: https://github.com/tv-labs/lua
 format_args(Args) ->
-  ["(", lists:join(", ", lists:map(fun(A) -> io_lib:format("~p",[A]) end, Args)), ")"].
+  ["(", lists:join(", ", lists:map(fun luerl_lib:format_value/1, Args)), ")"].
 
 coerce(X) ->
     X.
