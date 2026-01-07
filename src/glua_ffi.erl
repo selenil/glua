@@ -1,7 +1,7 @@
 -module(glua_ffi).
 -import(luerl_lib, [lua_error/2]).
 
--export([format_stacktrace/1, coerce/1, coerce_nil/0, coerce_userdata/1, wrap_fun/1, sandbox_fun/1, get_table_keys/2, get_table_keys_dec/2,
+-export([get_stacktrace/1, coerce/1, coerce_nil/0, coerce_userdata/1, wrap_fun/1, sandbox_fun/1, get_table_keys/2, get_table_keys_dec/2,
          get_private/2, set_table_keys/3, load/2, load_file/2, eval/2, eval_dec/2, eval_file/2,
          eval_file_dec/2, eval_chunk/2, eval_chunk_dec/2, call_function/3, call_function_dec/3]).
 
@@ -114,12 +114,17 @@ map_compile_error({Line, Type, Messages}) ->
     end,
     {lua_compile_error, Line, Kind, unicode:characters_to_binary(Messages)}.
 
-%% retrieves the stacktraces for a given state
-%% and returns it in a pretty-string
+
+get_stacktrace(State) ->
+    case luerl:get_stacktrace(State) of
+        [] ->
+            <<"">>;
+        Stacktrace -> format_stacktrace(State, Stacktrace)
+    end.
+
+%% turns a Lua stacktrace into a string suitable for pretty-printing
 %% borrowed from: https://github.com/tv-labs/lua
-format_stacktrace(State) ->
-    Stacktrace = luerl:get_stacktrace(State),
-    [_ | Rest] = Stacktrace,
+format_stacktrace(State, [_ | Rest] = Stacktrace) ->
     Zipped = gleam@list:zip(Stacktrace, Rest),
     Lines = lists:map(
         fun

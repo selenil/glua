@@ -124,7 +124,7 @@ pub fn format_error(error: LuaError) -> String {
       <> string.join(list.map(errors, format_compile_error), with: "\n")
     LuaRuntimeException(exception, state) -> {
       let base = "Lua runtime exception: " <> format_exception(exception)
-      let stacktrace = format_stacktrace(state)
+      let stacktrace = get_stacktrace(state)
 
       case stacktrace {
         "" -> base
@@ -194,8 +194,8 @@ fn format_exception(exception: LuaRuntimeExceptionKind) -> String {
   }
 }
 
-@external(erlang, "glua_ffi", "format_stacktrace")
-fn format_stacktrace(state: Lua) -> String
+@external(erlang, "glua_ffi", "get_stacktrace")
+fn get_stacktrace(state: Lua) -> String
 
 fn format_decode_error(error: decode.DecodeError) -> String {
   let base = "Expected " <> error.expected <> ", but found " <> error.found
