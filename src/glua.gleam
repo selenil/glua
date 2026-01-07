@@ -52,6 +52,8 @@ pub type LuaRuntimeExceptionKind {
   UndefinedMethod(object: String, method: String)
   /// The exception that happens when an invalid arithmetic operation is performed.
   BadArith(operator: String, args: List(String))
+  /// The exception that happens when a function is called with incorrect arguments.
+  Badarg(function: String, args: List(String))
   /// The exception that happens when a call to assert is made passing a value that evalues to `false` as the first argument.
   AssertError(message: String)
   /// An exception that could not be identified
@@ -189,6 +191,11 @@ fn format_exception(exception: LuaRuntimeExceptionKind) -> String {
       "Bad arithmetic expression: "
       <> string.join(args, with: " " <> operator <> " ")
 
+    Badarg(function, args) ->
+      "Bad argument "
+      <> string.join(list.map(args, format_lua_value), with: ", ")
+      <> " for function "
+      <> function
     AssertError(msg) -> "Assertion failed with message: " <> msg
     UnknownException -> "Unknown exception"
   }
@@ -205,6 +212,9 @@ fn format_decode_error(error: decode.DecodeError) -> String {
     path -> base <> " at " <> string.join(path, with: ".")
   }
 }
+
+@external(erlang, "luerl_lib", "format_value")
+fn format_lua_value(v: anything) -> String
 
 @external(erlang, "luerl_lib", "format_error")
 fn format_unknown_error(error: dynamic.Dynamic) -> String

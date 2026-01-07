@@ -98,6 +98,8 @@ map_error({lua_error, {assert_error, Msg} = Error, State}) ->
         _ ->
             {unknown_error, Error}
     end;
+map_error({lua_error, {badarg, F, Args}, State}) ->
+  {lua_runtime_exception, {badarg, atom_to_binary(F), Args}, State};
 map_error({lua_error, _, State}) ->
     {lua_runtime_exception, unknown_exception, State};
 map_error(Error) ->
