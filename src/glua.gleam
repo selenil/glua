@@ -7,6 +7,7 @@ import gleam/dynamic/decode
 import gleam/int
 import gleam/list
 import gleam/option
+import gleam/pair
 import gleam/result
 import gleam/string
 
@@ -247,8 +248,20 @@ pub fn int(v: Int) -> Value
 @external(erlang, "glua_ffi", "coerce")
 pub fn float(v: Float) -> Value
 
-@external(erlang, "glua_ffi", "coerce")
-pub fn table(values: List(#(Value, Value))) -> Value
+pub fn table(lua: Lua, values: List(#(Value, Value))) -> #(Lua, Value) {
+  let #(lua, values) =
+    list.fold(values, #(lua, []), fn(acc, pair) {
+      let #(lua, values) = acc
+      let #(enc1, lua) = encode(pair.0, lua)
+      let #(enc2, lua) = encode(pair.1, lua)
+      #(lua, [#(enc1, enc2), ..values])
+    })
+
+  do_table(values, lua) |> pair.swap
+}
+
+@external(erlang, "luerl_heap", "alloc_table")
+fn do_table(values: List(#(Value, Value)), lua: Lua) -> #(Value, Lua)
 
 pub fn table_decoder(
   keys_decoder: decode.Decoder(a),
@@ -292,10 +305,11 @@ pub fn list(encoder: fn(a) -> Value, values: List(a)) -> List(Value) {
 /// }
 ///
 /// let state = glua.new()
+/// let #(state, userdata) = glua.userdata(state, User(name: "Jhon Doe", is_admin: False))
 /// let assert Ok(state) = glua.set(
 ///   state:,
 ///   keys: ["a_user"],
-///   value: glua.userdata(User(name: "Jhon Doe", is_admin: False))
+///   value: userdata
 /// )
 ///
 /// let assert Ok(#(_, [result])) = glua.eval(state:, code: "return a_user", using: user_decoder)
@@ -308,17 +322,18 @@ pub fn list(encoder: fn(a) -> Value, values: List(a)) -> List(Value) {
 /// }
 ///
 /// let state = glua.new()
+/// let #(state, userdata) = glua.userdata(state, Person(name: "Lucy", email: "lucy@example.com"))
 /// let assert Ok(lua) = glua.set(
 ///   state:,
 ///   keys: ["lucy"],
-///   value: glua.userdata(Person(name: "Lucy", email: "lucy@example.com"))
+///   value: userdata
 /// )
 ///
 /// let assert Error(glua.LuaRuntimeException(glua.IllegalIndex(_), _)) =
 ///   glua.eval(state:, code: "return lucy.email", using: decode.string)
 /// ```
-@external(erlang, "glua_ffi", "coerce_userdata")
-pub fn userdata(v: anything) -> Value
+@external(erlang, "glua_ffi", "alloc_userdata")
+pub fn userdata(lua: Lua, v: anything) -> #(Lua, Value)
 
 @external(erlang, "glua_ffi", "wrap_fun")
 fn wrap_function(
@@ -511,7 +526,7 @@ pub fn set(
       Ok(_) -> Ok(#(keys, lua))
 
       Error(KeyNotFound(_)) -> {
-        let #(tbl, lua) = alloc_table([], lua)
+        let #(tbl, lua) = do_table([], lua)
         do_set(lua, keys, tbl)
         |> result.map(fn(lua) { #(keys, lua) })
       }
@@ -578,8 +593,8 @@ pub fn set_lua_paths(
   set(lua, ["package", "path"], paths)
 }
 
-@external(erlang, "luerl_emul", "alloc_table")
-fn alloc_table(content: List(a), lua: Lua) -> #(a, Lua)
+@external(erlang, "glua_ffi", "encode")
+fn encode(value: anything, lua: Lua) -> #(Value, Lua)
 
 @external(erlang, "glua_ffi", "get_table_keys_dec")
 fn do_get(lua: Lua, keys: List(String)) -> Result(dynamic.Dynamic, LuaError)

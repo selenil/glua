@@ -21,11 +21,13 @@ pub fn get_table_test() {
   ]
   let cool_numbers =
     glua.function(fn(lua, _params) {
-      let table =
+      let #(lua, table) =
         glua.table(
+          lua,
           my_table
-          |> list.map(fn(pair) { #(glua.string(pair.0), glua.int(pair.1)) }),
+            |> list.map(fn(pair) { #(glua.string(pair.0), glua.int(pair.1)) }),
         )
+
       #(lua, [table])
     })
 
@@ -119,17 +121,11 @@ pub fn new_sandboxed_test() {
 }
 
 pub fn encoding_and_decoding_nested_tables_test() {
-  let nested_table = [
-    #(
-      glua.string("key"),
-      glua.table([
-        #(
-          glua.int(1),
-          glua.table([#(glua.string("deeper_key"), glua.string("deeper_value"))]),
-        ),
-      ]),
-    ),
-  ]
+  let lua = glua.new()
+  let #(lua, tb1) =
+    glua.table(lua, [#(glua.string("deeper_key"), glua.string("deeper_value"))])
+  let #(lua, tb2) = glua.table(lua, [#(glua.int(1), tb1)])
+  let #(lua, tb3) = glua.table(lua, [#(glua.string("key"), tb2)])
 
   let keys = ["my_nested_table"]
 
@@ -141,9 +137,8 @@ pub fn encoding_and_decoding_nested_tables_test() {
         glua.table_decoder(decode.string, decode.string),
       ),
     )
-  let tbl = glua.table(nested_table)
 
-  let assert Ok(lua) = glua.set(state: glua.new(), keys:, value: tbl)
+  let assert Ok(lua) = glua.set(state: lua, keys:, value: tb3)
 
   let assert Ok(result) =
     glua.get(state: lua, keys:, using: nested_table_decoder)
@@ -157,22 +152,21 @@ pub type Userdata {
 
 pub fn userdata_test() {
   let lua = glua.new()
-  let userdata = Userdata("my-userdata", 1)
+  let #(lua, userdata) = glua.userdata(lua, Userdata("my-userdata", 1))
   let userdata_decoder = {
     use foo <- decode.field(1, decode.string)
     use bar <- decode.field(2, decode.int)
     decode.success(Userdata(foo:, bar:))
   }
 
-  let assert Ok(lua) = glua.set(lua, ["my_userdata"], glua.userdata(userdata))
+  let assert Ok(lua) = glua.set(lua, ["my_userdata"], userdata)
   let assert Ok(#(lua, [result])) =
     glua.eval(lua, "return my_userdata", userdata_decoder)
 
-  assert result == userdata
+  assert result == Userdata("my-userdata", 1)
 
-  let userdata = Userdata("other_userdata", 2)
-  let assert Ok(lua) =
-    glua.set(lua, ["my_other_userdata"], glua.userdata(userdata))
+  let #(lua, userdata) = glua.userdata(lua, Userdata("other-userdata", 2))
+  let assert Ok(lua) = glua.set(lua, ["my_other_userdata"], userdata)
   let assert Error(glua.LuaRuntimeException(glua.IllegalIndex(index, _), _)) =
     glua.eval(lua, "return my_other_userdata.foo", decode.string)
 
@@ -236,8 +230,9 @@ pub fn set_test() {
 
   let keys = ["math", "squares"]
 
-  let encoded =
+  let #(lua, encoded) =
     glua.table(
+      lua,
       numbers |> list.map(fn(pair) { #(glua.int(pair.0), glua.int(pair.1)) }),
     )
   let assert Ok(lua) = glua.set(lua, keys, encoded)
@@ -260,8 +255,9 @@ pub fn set_test() {
   let encoded = glua.function(count_odd)
   let assert Ok(lua) = glua.set(glua.new(), ["count_odd"], encoded)
 
-  let arg =
+  let #(lua, arg) =
     glua.table(
+      lua,
       list.index_map(list.range(1, 10), fn(i, n) {
         #(glua.int(i + 1), glua.int(n))
       }),
@@ -277,8 +273,8 @@ pub fn set_test() {
 
   assert result == 5
 
-  let tbl =
-    glua.table([
+  let #(lua, tbl) =
+    glua.table(lua, [
       #(
         glua.string("is_even"),
         glua.function(fn(lua, args) {
