@@ -271,8 +271,7 @@ pub fn table_decoder(
 pub fn function(
   f: fn(Lua, List(dynamic.Dynamic)) -> #(Lua, List(Value)),
 ) -> Value {
-  // we need a little wrapper for functions to satisfy luerl's order of arguments and return value type
-  wrap_function(f)
+  do_function(f)
 }
 
 pub fn list(encoder: fn(a) -> Value, values: List(a)) -> List(Value) {
@@ -332,7 +331,7 @@ pub fn userdata(lua: Lua, v: anything) -> #(Lua, Value) {
 fn do_userdata(v: anything, lua: Lua) -> #(Value, Lua)
 
 @external(erlang, "glua_ffi", "wrap_fun")
-fn wrap_function(
+fn do_function(
   fun: fn(Lua, List(dynamic.Dynamic)) -> #(Lua, List(Value)),
 ) -> Value
 
