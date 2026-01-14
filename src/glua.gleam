@@ -249,14 +249,6 @@ pub fn int(v: Int) -> Value
 pub fn float(v: Float) -> Value
 
 pub fn table(lua: Lua, values: List(#(Value, Value))) -> #(Lua, Value) {
-  let #(lua, values) =
-    list.fold(values, #(lua, []), fn(acc, pair) {
-      let #(lua, values) = acc
-      let #(enc1, lua) = encode(pair.0, lua)
-      let #(enc2, lua) = encode(pair.1, lua)
-      #(lua, [#(enc1, enc2), ..values])
-    })
-
   do_table(values, lua) |> pair.swap
 }
 
@@ -332,8 +324,12 @@ pub fn list(encoder: fn(a) -> Value, values: List(a)) -> List(Value) {
 /// let assert Error(glua.LuaRuntimeException(glua.IllegalIndex(_), _)) =
 ///   glua.eval(state:, code: "return lucy.email", using: decode.string)
 /// ```
-@external(erlang, "glua_ffi", "alloc_userdata")
-pub fn userdata(lua: Lua, v: anything) -> #(Lua, Value)
+pub fn userdata(lua: Lua, v: anything) -> #(Lua, Value) {
+  do_userdata(v, lua) |> pair.swap
+}
+
+@external(erlang, "luerl_heap", "alloc_userdata")
+fn do_userdata(v: anything, lua: Lua) -> #(Value, Lua)
 
 @external(erlang, "glua_ffi", "wrap_fun")
 fn wrap_function(
@@ -592,9 +588,6 @@ pub fn set_lua_paths(
   let paths = string.join(paths, with: ";") |> string
   set(lua, ["package", "path"], paths)
 }
-
-@external(erlang, "glua_ffi", "encode")
-fn encode(value: anything, lua: Lua) -> #(Value, Lua)
 
 @external(erlang, "glua_ffi", "get_table_keys_dec")
 fn do_get(lua: Lua, keys: List(String)) -> Result(dynamic.Dynamic, LuaError)

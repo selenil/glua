@@ -1,7 +1,7 @@
 -module(glua_ffi).
 -import(luerl_lib, [lua_error/2]).
 
--export([get_stacktrace/1, encode/2, coerce/1, coerce_nil/0, alloc_userdata/2, wrap_fun/1, sandbox_fun/1, get_table_keys/2, get_table_keys_dec/2,
+-export([get_stacktrace/1, coerce/1, coerce_nil/0, wrap_fun/1, sandbox_fun/1, get_table_keys/2, get_table_keys_dec/2,
          get_private/2, set_table_keys/3, load/2, load_file/2, eval/2, eval_dec/2, eval_file/2,
          eval_file_dec/2, eval_chunk/2, eval_chunk_dec/2, call_function/3, call_function_dec/3]).
 
@@ -29,47 +29,6 @@ to_gleam(Value) ->
         error ->
             {error, {unknown_error, nil}}
     end.
-
-%% helper to determine if a value is encoded or not
-%% borrowed from https://github.com/tv-labs/lua/blob/main/lib/lua/util.ex#L19-L35
-is_encoded(nil) ->
-    true;
-is_encoded(true) ->
-    true;
-is_encoded(false) ->
-    true;
-is_encoded(Binary) when is_binary(Binary) ->
-    true;
-is_encoded(N) when is_number(N) ->
-    true;
-is_encoded({tref,_}) ->
-    true;
-is_encoded({usdref,_}) ->
-    true;
-is_encoded({eref,_}) ->
-    true;
-is_encoded({funref,_,_}) ->
-    true;
-is_encoded({erl_func,_}) ->
-    true;
-is_encoded({erl_mfa,_,_,_}) ->
-    true;
-is_encoded(_) ->
-    false.
-
-encode(X, St0) ->
-    case is_encoded(X) of
-        true -> {X, St0};
-        false -> luerl:encode(X, St0)
-    end.
-
-encode_list(L, St0) when is_list(L) ->
-    Enc = fun(X, {L1, St}) ->
-                  {Enc, St1} = encode(X, St),
-                  {[Enc | L1], St1}
-          end,
-    {L1, St1} = lists:foldl(Enc, {[], St0}, L),
-    {lists:reverse(L1), St1}.
 
 map_error({error, Errors, _}) ->
     {lua_compile_failure, lists:map(fun map_compile_error/1, Errors)};
@@ -204,19 +163,17 @@ coerce(X) ->
 coerce_nil() ->
     nil.
 
-alloc_userdata(Lua, X) ->
-    {Enc, St} = encode({userdata, X}, Lua),
-    {St, Enc}.
-
 wrap_fun(Fun) ->
-    fun(Args, State) ->
+    {erl_func, fun(Args, State) ->
             Decoded = luerl:decode_list(Args, State),
             {NewState, Ret} = Fun(State, Decoded),
-            encode_list(Ret, NewState)
-    end.
+            {Ret, NewState}
+    end}.
 
 sandbox_fun(Msg) ->
-    fun(_, State) -> {error, map_error(lua_error({error_call, [Msg]}, State))} end.
+    {erl_func, fun(_, State) ->
+        {error, map_error(lua_error({error_call, [Msg]}, State))}
+    end}.
 
 get_table_keys(Lua, Keys) ->
     case luerl:get_table_keys(Keys, Lua) of
@@ -239,8 +196,7 @@ get_table_keys_dec(Lua, Keys) ->
     end.
 
 set_table_keys(Lua, Keys, Value) ->
-    {Enc, St} = encode(Value, Lua),
-    to_gleam(luerl:set_table_keys(Keys, Enc, St)).
+    to_gleam(luerl:set_table_keys(Keys, Value, Lua)).
 
 load(Lua, Code) ->
     to_gleam(luerl:load(
@@ -276,12 +232,10 @@ eval_file_dec(Lua, Path) ->
                  unicode:characters_to_list(Path), Lua)).
 
 call_function(Lua, Fun, Args) ->
-    {EncodedArgs, State} = encode_list(Args, Lua),
-    to_gleam(luerl:call(Fun, EncodedArgs, State)).
+    to_gleam(luerl:call(Fun, Args, Lua)).
 
 call_function_dec(Lua, Fun, Args) ->
-    {EncodedArgs, St1} = encode_list(Args, Lua),
-    case luerl:call(Fun, EncodedArgs, St1) of
+    case luerl:call(Fun, Args, Lua) of
         {ok, Ret, St2} ->
             Values = luerl:decode_list(Ret, St2),
             {ok, {St2, Values}};
