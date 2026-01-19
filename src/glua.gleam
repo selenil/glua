@@ -329,6 +329,19 @@ fn do_function(
   fun: fn(Lua, List(dynamic.Dynamic)) -> #(Lua, List(Value)),
 ) -> Value
 
+pub fn deference(
+  state lua: Lua,
+  ref ref: Value,
+  using decoder: decode.Decoder(a),
+) -> Result(a, LuaError) {
+  do_deference(lua, ref)
+  |> decode.run(decoder)
+  |> result.map_error(UnexpectedResultType)
+}
+
+@external(erlang, "glua_ffi", "deference")
+fn do_deference(lua: Lua, ref: Value) -> dynamic.Dynamic
+
 /// Creates a new Lua VM instance
 @external(erlang, "luerl", "init")
 pub fn new() -> Lua

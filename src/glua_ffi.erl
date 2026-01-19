@@ -1,7 +1,9 @@
 -module(glua_ffi).
 -import(luerl_lib, [lua_error/2]).
+-import(ttdict, [fold/3]).
+-include_lib("luerl/include/luerl.hrl").
 
--export([get_stacktrace/1, coerce/1, coerce_nil/0, wrap_fun/1, sandbox_fun/1, get_table_keys/2,
+-export([get_stacktrace/1, deference/2, coerce/1, coerce_nil/0, wrap_fun/1, sandbox_fun/1, get_table_keys/2,
          get_private/2, set_table_keys/3, load/2, load_file/2, eval/2, eval_file/2,
          eval_chunk/2, call_function/3]).
 
@@ -29,6 +31,62 @@ to_gleam(Value) ->
         error ->
             {error, {unknown_error, nil}}
     end.
+
+%% transforms Lua values to their corresponding Erlang representation
+%% this is similar to `luerl:decode/2`, but returns values that are more decode-friendly in Gleam
+deference(St, LT) ->
+    deference(LT, St, []).
+
+deference(nil, _, _) -> nil;
+deference(false, _, _) -> false;
+deference(true, _, _) -> true;
+deference(B, _, _) when is_binary(B) -> B;
+deference(N, _, _) when is_number(N) -> N;         %Integers and floats
+deference(#tref{}=T, St, In) ->
+    deference_table(T, St, In);
+deference(#usdref{}=U, St, In) ->
+    {#userdata{d=Data},_} = luerl_heap:get_userdata(U, St),
+    Data;
+deference(#funref{}=Fun, _St, _In) ->
+    deference_fun(Fun);
+deference(#erl_func{code=Fun}, _St, _In) ->
+    Fun;                                       %Just the bare fun
+deference(#erl_mfa{m=M, f=F}, _St, _In) ->
+    deference_fun(fun(Args, St0) -> M:F(nil, Args, St0) end);
+deference(Lua, _, _) -> error({badarg,Lua}).       %Shouldn't have anything else
+
+deference_table(#tref{i=N}=T, St, In0) ->
+    case lists:member(N, In0) of
+        true ->
+            % Been here before
+            error({recursive_table, T});
+        false ->
+            % We are in this as well
+            In1 = [N | In0],
+            case luerl_heap:get_table(T, St) of
+                #table{a = Arr, d = Dict} ->
+                    Fun = fun(K, V, Acc) ->
+                        Acc#{
+                            deference(K, St, In1)
+                            => deference(V, St, In1)
+                        }
+                    end,
+                    M0 = ttdict:fold(Fun, #{}, Dict),
+                    array:sparse_foldr(Fun, M0, Arr);
+                _Undefined ->
+                    error(badarg)
+            end
+    end.
+
+deference_fun(F) when is_function(F, 2) ->
+    {luafun, fun(St0, Args) ->
+        try
+            {Ret, St1} = F(Args, St0),
+            {St1, Ret}
+        catch
+            error:{lua_error, _, _} = Err -> {error, map_error(Err)}
+        end
+    end}.
 
 map_error({error, Errors, _}) ->
     {lua_compile_failure, lists:map(fun map_compile_error/1, Errors)};
@@ -165,8 +223,7 @@ coerce_nil() ->
 
 wrap_fun(Fun) ->
     {erl_func, fun(Args, State) ->
-            Decoded = luerl:decode_list(Args, State),
-            {NewState, Ret} = Fun(State, Decoded),
+            {NewState, Ret} = Fun(State, deference(Args, State)),
             {Ret, NewState}
     end}.
 
