@@ -1,9 +1,9 @@
 -module(glua_ffi).
 -import(luerl_lib, [lua_error/2]).
 
--export([get_stacktrace/1, coerce/1, coerce_nil/0, wrap_fun/1, sandbox_fun/1, get_table_keys/2, get_table_keys_dec/2,
-         get_private/2, set_table_keys/3, load/2, load_file/2, eval/2, eval_dec/2, eval_file/2,
-         eval_file_dec/2, eval_chunk/2, eval_chunk_dec/2, call_function/3, call_function_dec/3]).
+-export([get_stacktrace/1, coerce/1, coerce_nil/0, wrap_fun/1, sandbox_fun/1, get_table_keys/2,
+         get_private/2, set_table_keys/3, load/2, load_file/2, eval/2, eval_file/2,
+         eval_chunk/2, call_function/3]).
 
 %% turn `{userdata, Data}` into `Data` to make it more easy to decode it in Gleam
 maybe_process_userdata(Lst) when is_list(Lst) ->
@@ -185,16 +185,6 @@ get_table_keys(Lua, Keys) ->
             to_gleam(Other)
     end.
 
-get_table_keys_dec(Lua, Keys) ->
-    case luerl:get_table_keys_dec(Keys, Lua) of
-        {ok, nil, _} ->
-            {error, {key_not_found, Keys}};
-        {ok, Value, _} ->
-            {ok, Value};
-        Other ->
-            to_gleam(Other)
-    end.
-
 set_table_keys(Lua, Keys, Value) ->
     to_gleam(luerl:set_table_keys(Keys, Value, Lua)).
 
@@ -213,35 +203,15 @@ eval(Lua, Code) ->
     to_gleam(luerl:do(
                  unicode:characters_to_list(Code), Lua)).
 
-eval_dec(Lua, Code) ->
-    to_gleam(luerl:do_dec(
-                 unicode:characters_to_list(Code), Lua)).
-
 eval_chunk(Lua, Chunk) ->
     to_gleam(luerl:call_chunk(Chunk, Lua)).
-
-eval_chunk_dec(Lua, Chunk) ->
-    call_function_dec(Lua, Chunk, []).
 
 eval_file(Lua, Path) ->
     to_gleam(luerl:dofile(
                  unicode:characters_to_list(Path), Lua)).
 
-eval_file_dec(Lua, Path) ->
-    to_gleam(luerl:dofile_dec(
-                 unicode:characters_to_list(Path), Lua)).
-
 call_function(Lua, Fun, Args) ->
     to_gleam(luerl:call(Fun, Args, Lua)).
-
-call_function_dec(Lua, Fun, Args) ->
-    case luerl:call(Fun, Args, Lua) of
-        {ok, Ret, St2} ->
-            Values = luerl:decode_list(Ret, St2),
-            {ok, {St2, Values}};
-        Other ->
-            to_gleam(Other)
-    end.
 
 get_private(Lua, Key) ->
     try
