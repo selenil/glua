@@ -7,23 +7,14 @@
          get_private/2, set_table_keys/3, load/2, load_file/2, eval/2, eval_file/2,
          eval_chunk/2, call_function/3]).
 
-%% turn `{userdata, Data}` into `Data` to make it more easy to decode it in Gleam
-maybe_process_userdata(Lst) when is_list(Lst) ->
-    lists:map(fun maybe_process_userdata/1, Lst);
-maybe_process_userdata({userdata, Data}) ->
-    Data;
-maybe_process_userdata(Other) ->
-    Other.
-
 %% helper to convert luerl return values to a format
 %% that is more suitable for use in Gleam code
 to_gleam(Value) ->
     case Value of
         {ok, Result, LuaState} ->
-            Values = maybe_process_userdata(Result),
-            {ok, {LuaState, Values}};
+            {ok, {LuaState, Result}};
         {ok, _} = Result ->
-            maybe_process_userdata(Result);
+            Result;
         {lua_error, _, _} = Error ->
             {error, map_error(Error)};
         {error, _, _} = Error ->
