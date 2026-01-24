@@ -445,8 +445,17 @@ pub fn get(state lua: Lua, keys keys: List(String)) -> Result(Value, LuaError)
 ///      |> glua.get_private("private_value", decode.string)
 ///   == Ok("secret_value")
 /// ```
+pub fn get_private(
+  state lua: Lua,
+  key key: String,
+  using decoder: decode.Decoder(a),
+) -> Result(a, LuaError) {
+  use value <- result.try(do_get_private(lua, key))
+  decode.run(value, decoder) |> result.map_error(UnexpectedResultType)
+}
+
 @external(erlang, "glua_ffi", "get_private")
-pub fn get_private(state lua: Lua, key key: String) -> Result(Value, LuaError)
+fn do_get_private(lua: Lua, key: String) -> Result(dynamic.Dynamic, LuaError)
 
 /// Sets a value in the Lua environment.
 ///
