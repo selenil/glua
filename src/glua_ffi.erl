@@ -76,7 +76,7 @@ deference_fun(F) when is_function(F, 2) ->
     {luafun, fun(St0, Args) ->
         try
             {Ret, St1} = F(Args, St0),
-            {St1, Ret}
+            {ok, {St1, Ret}}
         catch
             error:{lua_error, _, _} = Err -> {error, map_error(Err)}
         end
