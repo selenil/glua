@@ -69,7 +69,6 @@ pub type LuaRuntimeExceptionKind {
 /// let assert Error(e) = glua.eval(
 ///   state: glua.new(),
 ///   code: "if true end",
-///   using: decode.string
 /// )
 ///
 /// glua.format_error(e)
@@ -80,7 +79,6 @@ pub type LuaRuntimeExceptionKind {
 /// let assert Error(e) = glua.eval(
 ///   state: glua.new(),
 ///   code: "local a = 1; local b = true; return a + b",
-///   using: decode.string
 /// )
 ///
 /// glua.format_error(e)
@@ -91,7 +89,6 @@ pub type LuaRuntimeExceptionKind {
 /// let assert Error(e) = glua.get(
 ///   state: glua.new(),
 ///   keys: ["a_value"],
-///   using: decode.string
 /// )
 /// 
 /// glua.format_error(e)
@@ -102,7 +99,6 @@ pub type LuaRuntimeExceptionKind {
 /// let assert Error(e) = glua.eval_file(
 ///   state: glua.new(),
 ///   path: "my_lua_file.lua",
-///   using: decode.string
 /// )
 ///
 /// glua.format_error(e)
@@ -110,11 +106,11 @@ pub type LuaRuntimeExceptionKind {
 /// ```
 ///
 /// ```gleam
-/// let assert Error(e) = glua.eval(
+/// let assert Ok(#(state, [ref])) = glua.eval(
 ///   state: glua.new(),
 ///   code: "return 1 + 1",
-///   using: decode.string
 /// )
+/// let assert Error(e) = glua.deference(state:, ref:, using: decode.string)
 ///
 /// glua.format_error(e)
 /// // -> "Expected String, but found Int"
@@ -297,8 +293,9 @@ pub fn list(encoder: fn(a) -> Value, values: List(a)) -> List(Value) {
 ///   value: userdata
 /// )
 ///
-/// let assert Ok(#(_, [result])) = glua.eval(state:, code: "return a_user", using: user_decoder)
-/// assert result == User("Jhon Doe", False)
+/// let assert Ok(#(state, [ref])) = glua.eval(state:, code: "return a_user")
+/// glua.deference(state:, ref:, using: user_decoder)
+/// // -> Ok(User("Jhon Doe", False))
 /// ```
 ///
 /// ```gleam
@@ -315,7 +312,7 @@ pub fn list(encoder: fn(a) -> Value, values: List(a)) -> List(Value) {
 /// )
 ///
 /// let assert Error(glua.LuaRuntimeException(glua.IllegalIndex(_), _)) =
-///   glua.eval(state:, code: "return lucy.email", using: decode.string)
+///   glua.eval(state:, code: "return lucy.email")
 /// ```
 pub fn userdata(lua: Lua, v: anything) -> #(Lua, Value) {
   do_userdata(v, lua) |> pair.swap
@@ -329,6 +326,27 @@ fn do_function(
   fun: fn(Lua, List(dynamic.Dynamic)) -> #(Lua, List(Value)),
 ) -> Value
 
+/// Converts a reference to a Lua value into type-safe Gleam data using the provided decoder.
+///
+/// ## Examples
+///
+/// ```gleam
+/// let assert Ok(#(state, [ref])) = glua.eval(
+///   state: glua.new(),
+///   code: "return 'Hello from Lua!'"
+/// )
+/// glua.deference(state:, ref:, using: decode.string)
+/// // -> Ok("Hello from Lua!")
+/// ```
+///
+/// ```gleam
+/// let assert Ok(#(state, [ref1, ref2])) = glua.eval(
+///   state: glua.new(),
+///   code: "return 1, true"
+/// )
+/// assert glua.deference(state:, ref: ref1, using: decode.int) == Ok(1)
+/// assert glua.deference(state:, ref: ref2, using: decode.bool) == Ok(True)
+/// ```
 pub fn deference(
   state lua: Lua,
   ref ref: Value,
@@ -390,7 +408,6 @@ fn list_substraction(a: List(a), b: List(a)) -> List(a)
 /// let assert Error(glua.LuaRuntimeException(exception, _)) = glua.eval(
 ///   state: lua,
 ///   code: "os.execute(\"rm -f important_file\"); return 0",
-///   using: decode.int
 /// )
 /// // 'important_file' was not deleted
 /// assert exception == glua.ErrorCall(["os.execute is sandboxed"])
@@ -408,28 +425,26 @@ fn sandbox_fun(msg: String) -> Value
 /// ## Examples
 ///
 /// ```gleam
-/// glua.get(state: glua.new(), keys: ["_VERSION"], using: decode.string)
+/// let state = glua.new()
+/// let assert Ok(ref) = glua.get(state:, keys: ["_VERSION"])
+/// glua.deference(state:, ref:, using: decode.string)
 /// // -> Ok("Lua 5.3")
 /// ```
 ///
 /// ```gleam
-/// let #(lua, encoded) = glua.new() |> glua.bool(True)
-/// let assert Ok(lua) = glua.set(
-///   state: lua,
+/// let assert Ok(state) = glua.set(
+///   state: glua.new(),
 ///   keys: ["my_table", "my_value"],
-///   value: encoded
+///   value: glua.bool(True)
 /// )
 ///
-/// glua.get(
-///   state: lua,
-///   keys: ["my_table", "my_value"],
-///   using: decode.bool
-/// )
+/// let assert Ok(ref) = glua.get(state:, keys: ["my_table", "my_value"])
+/// glua.deference(state:, ref:, using: decode.bool)
 /// // -> Ok(True)
 /// ```
 ///
 /// ```gleam
-/// glua.get(state: glua.new(), keys: ["non_existent"], using: decode.string)
+/// glua.get(state: glua.new(), keys: ["non_existent"])
 /// // -> Error(glua.KeyNotFound(["non_existent"]))
 /// ```
 @external(erlang, "glua_ffi", "get_table_keys")
@@ -467,31 +482,33 @@ fn do_get_private(lua: Lua, key: String) -> Result(dynamic.Dynamic, LuaError)
 /// ## Examples
 ///
 /// ```gleam
-/// let #(lua, encoded) = glua.new() |> glua.int(10)
-/// let assert Ok(lua) = glua.set(
-///   state: lua,
+/// let assert Ok(state) = glua.set(
+///   state: glua.new(),
 ///   keys: ["my_number"],
-///   value: encoded
+///   value: glua.int(10)
 /// )
 ///
-/// glua.get(state: lua, keys: ["my_number"], using: decode.int)
+/// let assert Ok(ref) = glua.get(state: lua, keys: ["my_number"])
+/// glua.deference(state:, ref:, using: decode.int)
 /// // -> Ok(10)
 /// ```
 ///
 /// ```gleam
 /// let emails = ["jhondoe@example.com", "lucy@example.com"]
-/// let #(lua, encoded) = glua.new() |> glua.list(glua.string, emails)
-/// let assert Ok(lua) = glua.set(
-///   state: lua,
+/// let #(state, encoded) = glua.table(
+///   glua.new(),
+///   list.index_map(emails, fn(email, i) { #(glua.int(i + 1), glua.string(email)) })
+/// )
+/// let assert Ok(state) = glua.set(
+///   state:,
 ///   keys: ["info", "emails"],
 ///   value: encoded
 /// )
 ///
-/// let assert Ok(#(_, results)) = glua.eval(
-///   state: lua,
-///   code: "return info.emails",
-///   using: decode.string
-/// )
+/// let assert Ok(#(state, [ref])) = glua.eval(state:, code: "return info.emails")
+/// let assert Ok(results) =
+///   glua.deference(state:, ref:, using: decode.dict(decode.int, decode.string))
+///   |> result.map(dict.values)
 ///
 /// assert results == emails
 /// ```
@@ -559,13 +576,12 @@ pub fn set_api(
 ///   paths: my_scripts_paths
 /// )
 ///
-/// let assert Ok(#(_, [result])) = glua.eval(
+/// let assert Ok(#(state, [ref])) = glua.eval(
 ///   state:,
 ///   code: "local my_math = require 'my_script'; return my_math.square(3)"
-///   using: decode.int
 /// )
-///
-/// assert result = 9
+/// glua.deference(state:, ref:, using: decode.int)
+/// // -> Ok(9)
 /// ```
 pub fn set_lua_paths(
   state lua: Lua,
@@ -602,7 +618,7 @@ fn do_delete_private(key: String, lua: Lua) -> Lua
 
 /// Parses a string of Lua code and returns it as a compiled chunk.
 ///
-/// To eval the returned chunk, use `glua.eval_chunk` or `glua.ref_eval_chunk`.
+/// To eval the returned chunk, use `glua.eval_chunk`.
 @external(erlang, "glua_ffi", "load")
 pub fn load(
   state lua: Lua,
@@ -611,7 +627,7 @@ pub fn load(
 
 /// Parses a Lua source file and returns it as a compiled chunk.
 ///
-/// To eval the returned chunk, use `glua.eval_chunk` or `glua.ref_eval_chunk`.
+/// To eval the returned chunk, use `glua.eval_chunk`.
 @external(erlang, "glua_ffi", "load_file")
 pub fn load_file(
   state lua: Lua,
@@ -623,45 +639,34 @@ pub fn load_file(
 /// ## Examples
 ///
 /// ```gleam
-/// let assert Ok(#(_, results)) = glua.eval(
+/// let assert Ok(#(state, [ref])) = glua.eval(
 ///   state: glua.new(),
 ///   code: "return 1 + 2",
-///   using: decode.int
 /// )
-/// assert results == [3]
+/// glua.deference(state:, ref:, using: decode.int)
+/// // -> Ok(3)
 /// ```
 ///
 /// ```gleam
-/// let my_decoder = decode.one_of(decode.string, or: [
-///   decode.int |> decode.map(int.to_string)
-/// ])
-///
-/// let assert Ok(#(_, results)) = glua.eval(
+/// let assert Ok(#(state, [ref1, ref2])) = glua.eval(
 ///   state: glua.new(),
 ///   code: "return 'hello, world!', 10",
-///   using: my_decoder
 /// )
-/// assert results == ["hello, world!", "10"]
+/// assert glua.deference(state:, ref: ref1, using: decode.string) == "hello, world!"
+/// assert glua.deference(state:, ref: ref2, using: decode.int) == 10
 /// ```
 ///
 /// ```gleam
-/// glua.eval(state: glua.new(), code: "return 1 * ", using: decode.int)
+/// glua.eval(state: glua.new(), code: "return 1 * ")
 /// // -> Error(glua.LuaCompilerException(
 ///   messages: ["syntax error before: ", "1"]
-/// ))
-/// ```
-///
-/// ```gleam
-/// glua.eval(state: glua.new(), code: "return 'Hello, world!'", using: decode.int)
-/// // -> Error(glua.UnexpectedResultType(
-///   [decode.DecodeError("Int", "String", [])]
 /// ))
 /// ```
 ///
 /// > **Note**: If you are evaluating the same piece of code multiple times,
 /// > instead of calling `glua.eval` repeatly it is recommended to first convert
 /// > the code to a chunk by passing it to `glua.load`, and then
-/// > evaluate that chunk using `glua.eval_chunk` or `glua.ref_eval_chunk`.
+/// > evaluate that chunk using `glua.eval_chunk`.
 @external(erlang, "glua_ffi", "eval")
 pub fn eval(
   state lua: Lua,
@@ -677,13 +682,12 @@ pub fn eval(
 ///   code: "return 'hello, world!'"
 /// )
 ///
-/// let assert Ok(#(_, results)) = glua.eval_chunk(
+/// let assert Ok(#(state, [ref])) = glua.eval_chunk(
 ///   state: lua,
 ///   chunk:,
-///   using: decode.string
 /// )
-///
-/// assert results == ["hello, world!"]
+/// glua.deference(state:, ref:, using: decode.string)
+/// // -> Ok("hello, world!")
 /// ```
 @external(erlang, "glua_ffi", "eval_chunk")
 pub fn eval_chunk(
@@ -695,20 +699,18 @@ pub fn eval_chunk(
 ///
 /// ## Examples
 /// ```gleam
-/// let assert Ok(#(_, results)) = glua.eval_file(
+/// let assert Ok(#(state, [ref])) = glua.eval_file(
 ///   state: glua.new(),
 ///   path: "path/to/hello.lua",
-///   using: decode.string
 /// )
-///
-/// assert results == ["hello, world!"]
+/// glua.deference(state:, ref:, using: decode.string)
+/// Ok("hello, world!")
 /// ```
 ///
 /// ```gleam
 /// glua.eval_file(
 ///   state: glua.new(),
 ///   path: "path/to/non/existent/file",
-///   using: decode.string
 /// )
 /// //-> Error(glua.FileNotFound(["path/to/non/existent/file"]))
 /// ```
@@ -722,17 +724,14 @@ pub fn eval_file(
 ///
 /// ## Examples
 /// ```gleam
-/// let assert Ok(#(lua, fun)) = glua.ref_eval(state: glua.new(), code: "return math.sqrt")
-///
-/// let #(lua, encoded) = glua.int(lua, 81)
-/// let assert Ok(#(_, [result])) = glua.call_function(
-///   state: lua,
+/// let assert Ok(#(state, [fun])) = glua.eval(state: glua.new(), code: "return math.sqrt")
+/// let assert Ok(#(state, [ref])) = glua.call_function(
+///   state:,
 ///   ref: fun,
-///   args: [encoded],
-///   using: decode.int
+///   args: [glua.int(81)],
 /// )
-///
-/// assert result == 9
+/// glua.deference(state:, ref:, using: decode.int)
+/// // -> Ok(9)
 /// ```
 ///
 /// ```gleam
@@ -746,17 +745,14 @@ pub fn eval_file(
 ///
 /// return fib
 /// "
-/// let assert Ok(#(lua, fun)) = glua.ref_eval(state: glua.new(), code:)
-///
-/// let #(lua, encoded) = glua.int(lua, 10)
-/// let assert Ok(#(_, [result])) = glua.call_function(
+/// let assert Ok(#(state, [fun])) = glua.eval(state: glua.new(), code:)
+/// let assert Ok(#(state), [ref])) = glua.call_function(
 ///   state: lua,
 ///   ref: fun,
-///   args: [encoded],
-///   using: decode.int
+///   args: [glua.int(10)],
 /// )
-///
-/// assert result == 55 
+/// glua.deference(state:, ref:, using: decode.int)
+/// // -> Ok(55)
 /// ```
 @external(erlang, "glua_ffi", "call_function")
 pub fn call_function(
@@ -767,20 +763,18 @@ pub fn call_function(
 
 /// Gets a reference to the function at `keys`, then inmediatly calls it with the provided `args`.
 ///
-/// This is a shorthand for `glua.ref_get` followed by `glua.call_function`.
+/// This is a shorthand for `glua.get` followed by `glua.call_function`.
 ///
 /// ## Examples
 ///
 /// ```gleam
-/// let #(lua, encoded) = glua.new() |> glua.string("hello from gleam!")
-/// let assert Ok(#(_, [s])) = glua.call_function_by_name(
-///   state: lua,
+/// let assert Ok(#(state, [ref])) = glua.call_function_by_name(
+///   state: glua.new(),
 ///   keys: ["string", "upper"],
-///   args: [encoded],
-///   using: decode.string
+///   args: [glua.string("hello from Gleam!")],
 /// )
-///
-/// assert s == "HELLO FROM GLEAM!" 
+/// glua.deference(state:, ref:, using: decode.string)
+/// // -> Ok(HELLO FROM GLEAM!")
 /// ```
 pub fn call_function_by_name(
   state lua: Lua,
