@@ -38,7 +38,7 @@ deference(B, _, _) when is_binary(B) -> B;
 deference(N, _, _) when is_number(N) -> N;         %Integers and floats
 deference(#tref{}=T, St, In) ->
     deference_table(T, St, In);
-deference(#usdref{}=U, St, In) ->
+deference(#usdref{}=U, St, _In) ->
     {#userdata{d=Data},_} = luerl_heap:get_userdata(U, St),
     Data;
 deference(#funref{}=Fun, _St, _In) ->
