@@ -110,7 +110,7 @@ pub type LuaRuntimeExceptionKind {
 ///   state: glua.new(),
 ///   code: "return 1 + 1",
 /// )
-/// let assert Error(e) = glua.deference(state:, ref:, using: decode.string)
+/// let assert Error(e) = glua.dereference(state:, ref:, using: decode.string)
 ///
 /// glua.format_error(e)
 /// // -> "Expected String, but found Int"
@@ -293,7 +293,7 @@ pub fn list(encoder: fn(a) -> Value, values: List(a)) -> List(Value) {
 /// )
 ///
 /// let assert Ok(#(state, [ref])) = glua.eval(state:, code: "return a_user")
-/// glua.deference(state:, ref:, using: user_decoder)
+/// glua.dereference(state:, ref:, using: user_decoder)
 /// // -> Ok(User("Jhon Doe", False))
 /// ```
 ///
@@ -334,7 +334,7 @@ fn do_function(
 ///   state: glua.new(),
 ///   code: "return 'Hello from Lua!'"
 /// )
-/// glua.deference(state:, ref:, using: decode.string)
+/// glua.dereference(state:, ref:, using: decode.string)
 /// // -> Ok("Hello from Lua!")
 /// ```
 ///
@@ -343,21 +343,21 @@ fn do_function(
 ///   state: glua.new(),
 ///   code: "return 1, true"
 /// )
-/// assert glua.deference(state:, ref: ref1, using: decode.int) == Ok(1)
-/// assert glua.deference(state:, ref: ref2, using: decode.bool) == Ok(True)
+/// assert glua.dereference(state:, ref: ref1, using: decode.int) == Ok(1)
+/// assert glua.dereference(state:, ref: ref2, using: decode.bool) == Ok(True)
 /// ```
-pub fn deference(
+pub fn dereference(
   state lua: Lua,
   ref ref: Value,
   using decoder: decode.Decoder(a),
 ) -> Result(a, LuaError) {
-  do_deference(lua, ref)
+  do_dereference(lua, ref)
   |> decode.run(decoder)
   |> result.map_error(UnexpectedResultType)
 }
 
-@external(erlang, "glua_ffi", "deference")
-fn do_deference(lua: Lua, ref: Value) -> dynamic.Dynamic
+@external(erlang, "glua_ffi", "dereference")
+fn do_dereference(lua: Lua, ref: Value) -> dynamic.Dynamic
 
 /// Creates a new Lua VM instance
 @external(erlang, "luerl", "init")
@@ -426,7 +426,7 @@ fn sandbox_fun(msg: String) -> Value
 /// ```gleam
 /// let state = glua.new()
 /// let assert Ok(ref) = glua.get(state:, keys: ["_VERSION"])
-/// glua.deference(state:, ref:, using: decode.string)
+/// glua.dereference(state:, ref:, using: decode.string)
 /// // -> Ok("Lua 5.3")
 /// ```
 ///
@@ -438,7 +438,7 @@ fn sandbox_fun(msg: String) -> Value
 /// )
 ///
 /// let assert Ok(ref) = glua.get(state:, keys: ["my_table", "my_value"])
-/// glua.deference(state:, ref:, using: decode.bool)
+/// glua.dereference(state:, ref:, using: decode.bool)
 /// // -> Ok(True)
 /// ```
 ///
@@ -488,7 +488,7 @@ fn do_get_private(lua: Lua, key: String) -> Result(dynamic.Dynamic, LuaError)
 /// )
 ///
 /// let assert Ok(ref) = glua.get(state: lua, keys: ["my_number"])
-/// glua.deference(state:, ref:, using: decode.int)
+/// glua.dereference(state:, ref:, using: decode.int)
 /// // -> Ok(10)
 /// ```
 ///
@@ -506,7 +506,7 @@ fn do_get_private(lua: Lua, key: String) -> Result(dynamic.Dynamic, LuaError)
 ///
 /// let assert Ok(#(state, [ref])) = glua.eval(state:, code: "return info.emails")
 /// let assert Ok(results) =
-///   glua.deference(state:, ref:, using: decode.dict(decode.int, decode.string))
+///   glua.dereference(state:, ref:, using: decode.dict(decode.int, decode.string))
 ///   |> result.map(dict.values)
 ///
 /// assert results == emails
@@ -579,7 +579,7 @@ pub fn set_api(
 ///   state:,
 ///   code: "local my_math = require 'my_script'; return my_math.square(3)"
 /// )
-/// glua.deference(state:, ref:, using: decode.int)
+/// glua.dereference(state:, ref:, using: decode.int)
 /// // -> Ok(9)
 /// ```
 pub fn set_lua_paths(
@@ -642,7 +642,7 @@ pub fn load_file(
 ///   state: glua.new(),
 ///   code: "return 1 + 2",
 /// )
-/// glua.deference(state:, ref:, using: decode.int)
+/// glua.dereference(state:, ref:, using: decode.int)
 /// // -> Ok(3)
 /// ```
 ///
@@ -651,8 +651,8 @@ pub fn load_file(
 ///   state: glua.new(),
 ///   code: "return 'hello, world!', 10",
 /// )
-/// assert glua.deference(state:, ref: ref1, using: decode.string) == "hello, world!"
-/// assert glua.deference(state:, ref: ref2, using: decode.int) == 10
+/// assert glua.dereference(state:, ref: ref1, using: decode.string) == "hello, world!"
+/// assert glua.dereference(state:, ref: ref2, using: decode.int) == 10
 /// ```
 ///
 /// ```gleam
@@ -685,7 +685,7 @@ pub fn eval(
 ///   state: lua,
 ///   chunk:,
 /// )
-/// glua.deference(state:, ref:, using: decode.string)
+/// glua.dereference(state:, ref:, using: decode.string)
 /// // -> Ok("hello, world!")
 /// ```
 @external(erlang, "glua_ffi", "eval_chunk")
@@ -702,7 +702,7 @@ pub fn eval_chunk(
 ///   state: glua.new(),
 ///   path: "path/to/hello.lua",
 /// )
-/// glua.deference(state:, ref:, using: decode.string)
+/// glua.dereference(state:, ref:, using: decode.string)
 /// Ok("hello, world!")
 /// ```
 ///
@@ -729,7 +729,7 @@ pub fn eval_file(
 ///   ref: fun,
 ///   args: [glua.int(81)],
 /// )
-/// glua.deference(state:, ref:, using: decode.int)
+/// glua.dereference(state:, ref:, using: decode.int)
 /// // -> Ok(9)
 /// ```
 ///
@@ -750,7 +750,7 @@ pub fn eval_file(
 ///   ref: fun,
 ///   args: [glua.int(10)],
 /// )
-/// glua.deference(state:, ref:, using: decode.int)
+/// glua.dereference(state:, ref:, using: decode.int)
 /// // -> Ok(55)
 /// ```
 @external(erlang, "glua_ffi", "call_function")
@@ -772,7 +772,7 @@ pub fn call_function(
 ///   keys: ["string", "upper"],
 ///   args: [glua.string("hello from Gleam!")],
 /// )
-/// glua.deference(state:, ref:, using: decode.string)
+/// glua.dereference(state:, ref:, using: decode.string)
 /// // -> Ok(HELLO FROM GLEAM!")
 /// ```
 pub fn call_function_by_name(

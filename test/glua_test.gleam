@@ -35,7 +35,7 @@ pub fn get_table_test() {
   let assert Ok(#(lua, [ref])) =
     glua.call_function_by_name(lua, ["cool_numbers"], [])
   let assert Ok(table) =
-    glua.deference(
+    glua.dereference(
       state: lua,
       ref:,
       using: decode.dict(decode.string, decode.int),
@@ -102,7 +102,7 @@ pub fn new_sandboxed_test() {
 
   let code = "local s = require 'example'; return s"
   let assert Ok(#(state, [ref])) = glua.eval(state: lua, code:)
-  let assert Ok(result) = glua.deference(state:, ref:, using: decode.string)
+  let assert Ok(result) = glua.dereference(state:, ref:, using: decode.string)
 
   assert result == "LUA IS AN EMBEDDABLE LANGUAGE"
 }
@@ -126,7 +126,7 @@ pub fn encoding_and_decoding_nested_tables_test() {
 
   let assert Ok(ref) = glua.get(state: lua, keys:)
   let assert Ok(result) =
-    glua.deference(state: lua, ref:, using: nested_table_decoder)
+    glua.dereference(state: lua, ref:, using: nested_table_decoder)
 
   assert result
     == dict.from_list([
@@ -153,7 +153,7 @@ pub fn userdata_test() {
   let assert Ok(lua) = glua.set(lua, ["my_userdata"], userdata)
   let assert Ok(#(lua, [ref])) = glua.eval(lua, "return my_userdata")
   let assert Ok(result) =
-    glua.deference(state: lua, ref:, using: userdata_decoder)
+    glua.dereference(state: lua, ref:, using: userdata_decoder)
 
   assert result == Userdata("my-userdata", 1)
 
@@ -169,7 +169,7 @@ pub fn get_test() {
   let state = glua.new()
 
   let assert Ok(ref) = glua.get(state: state, keys: ["math", "pi"])
-  let assert Ok(pi) = glua.deference(state:, ref:, using: decode.float)
+  let assert Ok(pi) = glua.dereference(state:, ref:, using: decode.float)
 
   assert pi >. 3.14 && pi <. 3.15
 
@@ -177,7 +177,7 @@ pub fn get_test() {
   let encoded = glua.bool(True)
   let assert Ok(state) = glua.set(state:, keys:, value: encoded)
   let assert Ok(ref) = glua.get(state:, keys:)
-  let assert Ok(ret) = glua.deference(state:, ref:, using: decode.bool)
+  let assert Ok(ret) = glua.dereference(state:, ref:, using: decode.bool)
 
   assert ret == True
 
@@ -188,7 +188,7 @@ pub fn get_test() {
 "
   let assert Ok(#(state, _)) = glua.new() |> glua.eval(code:)
   let assert Ok(ref) = glua.get(state:, keys: ["my_value"])
-  let assert Ok(ret) = glua.deference(state:, ref:, using: decode.int)
+  let assert Ok(ret) = glua.dereference(state:, ref:, using: decode.int)
 
   assert ret == 10
 }
@@ -213,7 +213,8 @@ pub fn set_test() {
   let assert Ok(lua) =
     glua.set(state: glua.new(), keys: ["_VERSION"], value: encoded)
   let assert Ok(ref) = glua.get(state: lua, keys: ["_VERSION"])
-  let assert Ok(result) = glua.deference(state: lua, ref:, using: decode.string)
+  let assert Ok(result) =
+    glua.dereference(state: lua, ref:, using: decode.string)
 
   assert result == "custom version"
 
@@ -231,7 +232,7 @@ pub fn set_test() {
   let assert Ok(lua) = glua.set(lua, keys, encoded)
 
   let assert Ok(ref) = glua.get(lua, keys)
-  assert glua.deference(
+  assert glua.dereference(
       state: lua,
       ref:,
       using: decode.dict(decode.int, decode.int),
@@ -262,7 +263,7 @@ pub fn set_test() {
 
   let assert Ok(#(lua, [ref])) =
     glua.call_function_by_name(state: lua, keys: ["count_odd"], args: [arg])
-  let assert Ok(result) = glua.deference(state: lua, ref:, using: decode.int)
+  let assert Ok(result) = glua.dereference(state: lua, ref:, using: decode.int)
 
   assert result == 5
 
@@ -296,14 +297,14 @@ pub fn set_test() {
       keys: ["my_functions", "is_even"],
       args: [arg],
     )
-  let assert Ok(result) = glua.deference(state: lua, ref:, using: decode.bool)
+  let assert Ok(result) = glua.dereference(state: lua, ref:, using: decode.bool)
 
   assert result == True
 
   let assert Ok(#(lua, [ref])) =
     glua.eval(state: lua, code: "return my_functions.is_odd(4)")
 
-  let assert Ok(result) = glua.deference(state: lua, ref:, using: decode.bool)
+  let assert Ok(result) = glua.dereference(state: lua, ref:, using: decode.bool)
 
   assert result == False
 }
@@ -315,7 +316,8 @@ pub fn set_lua_paths_test() {
   let code = "local s = require 'example'; return s"
 
   let assert Ok(#(lua, [ref])) = glua.eval(state:, code:)
-  let assert Ok(result) = glua.deference(state: lua, ref:, using: decode.string)
+  let assert Ok(result) =
+    glua.dereference(state: lua, ref:, using: decode.string)
 
   assert result == "LUA IS AN EMBEDDABLE LANGUAGE"
 }
@@ -346,7 +348,7 @@ pub fn load_test() {
   let assert Ok(#(lua, chunk)) =
     glua.load(state: glua.new(), code: "return 5 * 5")
   let assert Ok(#(lua, [ref])) = glua.eval_chunk(state: lua, chunk:)
-  let assert Ok(result) = glua.deference(state: lua, ref:, using: decode.int)
+  let assert Ok(result) = glua.dereference(state: lua, ref:, using: decode.int)
 
   assert result == 25
 }
@@ -355,7 +357,8 @@ pub fn eval_load_file_test() {
   let assert Ok(#(lua, chunk)) =
     glua.load_file(state: glua.new(), path: "./test/lua/example.lua")
   let assert Ok(#(lua, [ref])) = glua.eval_chunk(state: lua, chunk:)
-  let assert Ok(result) = glua.deference(state: lua, ref:, using: decode.string)
+  let assert Ok(result) =
+    glua.dereference(state: lua, ref:, using: decode.string)
 
   assert result == "LUA IS AN EMBEDDABLE LANGUAGE"
 
@@ -367,14 +370,15 @@ pub fn eval_load_file_test() {
 pub fn eval_test() {
   let assert Ok(#(lua, [ref])) =
     glua.eval(state: glua.new(), code: "return 'hello, ' .. 'world!'")
-  let assert Ok(result) = glua.deference(state: lua, ref:, using: decode.string)
+  let assert Ok(result) =
+    glua.dereference(state: lua, ref:, using: decode.string)
 
   assert result == "hello, world!"
 
   let assert Ok(#(lua, refs)) =
     glua.eval(state: lua, code: "return 2 + 2, 3 - 1")
   let assert Ok(results) =
-    list.try_map(refs, glua.deference(state: lua, ref: _, using: decode.int))
+    list.try_map(refs, glua.dereference(state: lua, ref: _, using: decode.int))
 
   assert results == [4, 2]
 }
@@ -397,7 +401,7 @@ pub fn eval_returns_proper_errors_test() {
 
   let assert Ok(#(lua, [ref])) =
     glua.eval(state:, code: "return 'Hello from Lua!'")
-  assert glua.deference(state: lua, ref:, using: decode.int)
+  assert glua.dereference(state: lua, ref:, using: decode.int)
     == Error(
       glua.UnexpectedResultType([decode.DecodeError("Int", "String", [])]),
     )
@@ -463,7 +467,7 @@ pub fn eval_returns_proper_errors_test() {
 pub fn eval_file_test() {
   let assert Ok(#(state, [ref])) =
     glua.eval_file(state: glua.new(), path: "./test/lua/example.lua")
-  let assert Ok(result) = glua.deference(state:, ref:, using: decode.string)
+  let assert Ok(result) = glua.dereference(state:, ref:, using: decode.string)
 
   assert result == "LUA IS AN EMBEDDABLE LANGUAGE"
 }
@@ -476,7 +480,8 @@ pub fn call_function_test() {
 
   let assert Ok(#(lua, [ref])) =
     glua.call_function(state: lua, ref: fun, args: [encoded])
-  let assert Ok(result) = glua.deference(state: lua, ref:, using: decode.string)
+  let assert Ok(result) =
+    glua.dereference(state: lua, ref:, using: decode.string)
 
   assert result == "Lua"
 
@@ -486,7 +491,8 @@ pub fn call_function_test() {
   let args = list.map(["Lua in ", "Gleam"], glua.string)
 
   let assert Ok(#(lua, [ref])) = glua.call_function(state: lua, ref: fun, args:)
-  let assert Ok(result) = glua.deference(state: lua, ref:, using: decode.string)
+  let assert Ok(result) =
+    glua.dereference(state: lua, ref:, using: decode.string)
 
   assert result == "Lua in Gleam"
 }
@@ -500,7 +506,7 @@ pub fn call_function_returns_proper_errors_test() {
   let arg = glua.string("Hello from Gleam!")
 
   let assert Ok(#(lua, [ref])) = glua.call_function(state:, ref:, args: [arg])
-  assert glua.deference(state: lua, ref:, using: decode.int)
+  assert glua.dereference(state: lua, ref:, using: decode.int)
     == Error(
       glua.UnexpectedResultType([decode.DecodeError("Int", "String", [])]),
     )
@@ -519,13 +525,13 @@ pub fn call_function_by_name_test() {
   let args = list.map([20, 10], glua.int)
   let assert Ok(#(lua, [ref])) =
     glua.call_function_by_name(state: glua.new(), keys: ["math", "max"], args:)
-  let assert Ok(result) = glua.deference(state: lua, ref:, using: decode.int)
+  let assert Ok(result) = glua.dereference(state: lua, ref:, using: decode.int)
 
   assert result == 20
 
   let assert Ok(#(lua, [ref])) =
     glua.call_function_by_name(state: lua, keys: ["math", "min"], args:)
-  let assert Ok(result) = glua.deference(state: lua, ref:, using: decode.int)
+  let assert Ok(result) = glua.dereference(state: lua, ref:, using: decode.int)
 
   assert result == 10
 
@@ -533,7 +539,7 @@ pub fn call_function_by_name_test() {
   let assert Ok(#(state, [ref])) =
     glua.call_function_by_name(state: lua, keys: ["math", "type"], args: [arg])
   let assert Ok(result) =
-    glua.deference(state:, ref:, using: decode.optional(decode.string))
+    glua.dereference(state:, ref:, using: decode.optional(decode.string))
 
   assert result == option.Some("float")
 }
@@ -546,7 +552,8 @@ pub fn nested_function_references_test() {
 
   let arg = glua.int(400)
   let assert Ok(#(_, [ref])) = glua.call_function(state: lua, ref:, args: [arg])
-  let assert Ok(result) = glua.deference(state: lua, ref:, using: decode.float)
+  let assert Ok(result) =
+    glua.dereference(state: lua, ref:, using: decode.float)
   assert result == 20.0
 }
 
@@ -574,6 +581,6 @@ pub fn format_error_test() {
     == "Lua source file \"non_existent_file\" not found"
 
   let assert Ok(#(lua, [ref])) = glua.eval(state:, code: "return 1 + 1")
-  let assert Error(e) = glua.deference(state: lua, ref:, using: decode.string)
+  let assert Error(e) = glua.dereference(state: lua, ref:, using: decode.string)
   assert glua.format_error(e) == "Expected String, but found Int"
 }

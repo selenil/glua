@@ -3,7 +3,7 @@
 -import(ttdict, [fold/3]).
 -include_lib("luerl/include/luerl.hrl").
 
--export([get_stacktrace/1, deference/2, coerce/1, coerce_nil/0, wrap_fun/1, sandbox_fun/1, get_table_keys/2,
+-export([get_stacktrace/1, dereference/2, coerce/1, coerce_nil/0, wrap_fun/1, sandbox_fun/1, get_table_keys/2,
          get_private/2, set_table_keys/3, load/2, load_file/2, eval/2, eval_file/2,
          eval_chunk/2, call_function/3]).
 
@@ -23,33 +23,33 @@ to_gleam(Value) ->
             {error, {unknown_error, nil}}
     end.
 
-deference_list(St, LuerlTerms) ->
-    lists:map(fun (Lt) -> deference(St, Lt) end, LuerlTerms).
+dereference_list(St, LuerlTerms) ->
+    lists:map(fun (Lt) -> dereference(St, Lt) end, LuerlTerms).
 
 %% transforms Lua values to their corresponding Erlang representation
 %% this is similar to `luerl:decode/2`, but returns values that are more decode-friendly in Gleam
-deference(St, LT) ->
-    deference(LT, St, []).
+dereference(St, LT) ->
+    dereference(LT, St, []).
 
-deference(nil, _, _) -> nil;
-deference(false, _, _) -> false;
-deference(true, _, _) -> true;
-deference(B, _, _) when is_binary(B) -> B;
-deference(N, _, _) when is_number(N) -> N;         %Integers and floats
-deference(#tref{}=T, St, In) ->
-    deference_table(T, St, In);
-deference(#usdref{}=U, St, _In) ->
+dereference(nil, _, _) -> nil;
+dereference(false, _, _) -> false;
+dereference(true, _, _) -> true;
+dereference(B, _, _) when is_binary(B) -> B;
+dereference(N, _, _) when is_number(N) -> N;         %Integers and floats
+dereference(#tref{}=T, St, In) ->
+    dereference_table(T, St, In);
+dereference(#usdref{}=U, St, _In) ->
     {#userdata{d=Data},_} = luerl_heap:get_userdata(U, St),
     Data;
-deference(#funref{}=Fun, _St, _In) ->
-    deference_fun(Fun);
-deference(#erl_func{code=Fun}, _St, _In) ->
+dereference(#funref{}=Fun, _St, _In) ->
+    dereference_fun(Fun);
+dereference(#erl_func{code=Fun}, _St, _In) ->
     Fun;                                       %Just the bare fun
-deference(#erl_mfa{m=M, f=F}, _St, _In) ->
-    deference_fun(fun(Args, St0) -> M:F(nil, Args, St0) end);
-deference(Lua, _, _) -> error({badarg,Lua}).       %Shouldn't have anything else
+dereference(#erl_mfa{m=M, f=F}, _St, _In) ->
+    dereference_fun(fun(Args, St0) -> M:F(nil, Args, St0) end);
+dereference(Lua, _, _) -> error({badarg,Lua}).       %Shouldn't have anything else
 
-deference_table(#tref{i=N}=T, St, In0) ->
+dereference_table(#tref{i=N}=T, St, In0) ->
     case lists:member(N, In0) of
         true ->
             % Been here before
@@ -61,8 +61,8 @@ deference_table(#tref{i=N}=T, St, In0) ->
                 #table{a = Arr, d = Dict} ->
                     Fun = fun(K, V, Acc) ->
                         Acc#{
-                            deference(K, St, In1)
-                            => deference(V, St, In1)
+                            dereference(K, St, In1)
+                            => dereference(V, St, In1)
                         }
                     end,
                     M0 = ttdict:fold(Fun, #{}, Dict),
@@ -72,7 +72,7 @@ deference_table(#tref{i=N}=T, St, In0) ->
             end
     end.
 
-deference_fun(F) when is_function(F, 2) ->
+dereference_fun(F) when is_function(F, 2) ->
     {luafun, fun(St0, Args) ->
         try
             {Ret, St1} = F(Args, St0),
@@ -217,7 +217,7 @@ coerce_nil() ->
 
 wrap_fun(Fun) ->
     {erl_func, fun(Args, State) ->
-            {NewState, Ret} = Fun(State, deference_list(State, Args)),
+            {NewState, Ret} = Fun(State, dereference_list(State, Args)),
             {Ret, NewState}
     end}.
 
