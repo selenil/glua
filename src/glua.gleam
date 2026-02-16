@@ -2,6 +2,7 @@
 ////
 //// Gleam wrapper around [Luerl](https://github.com/rvirding/luerl).
 
+import gleam/bool
 import gleam/dynamic
 import gleam/dynamic/decode
 import gleam/int
@@ -369,6 +370,28 @@ pub fn try(result: Result(a, e), next: fn(a) -> Action(b, e)) -> Action(b, e) {
     Ok(ret) -> Action(next(ret).function)
     Error(err) -> failure(err)
   }
+}
+
+/// Runs a callback function if the given bool is `False`, otherwise return a failing `Action`
+/// using the provided value.
+///
+/// ## Examples
+///
+/// ```gleam
+/// glua.run(glua.new(), {
+///   use ret <- glua.then(glua.eval(code: "local a = 1"))
+///   use <- glua.guard(when: ret == [], return: "expected at least one value from Lua")
+///
+///  fold(ret, glua.dereference(_, using: decode.int))
+/// })
+/// // -> Error(glua.CustomError("expected at least one value from Lua"))
+/// ```
+pub fn guard(
+  when requirement: Bool,
+  return consequence: e,
+  otherwise alternative: fn() -> Action(a, e),
+) -> Action(a, e) {
+  bool.guard(requirement, failure(consequence), alternative)
 }
 
 /// Creates an `Action` that always succeeds and returns `value`.
