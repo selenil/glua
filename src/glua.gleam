@@ -238,6 +238,7 @@ fn format_unknown_error(error: dynamic.Dynamic) -> String
 /// executing an `Action` using outdated state could lead to unexpected behaviour.
 ///
 /// ```gleam
+/// let state = glua.new()
 /// let result = {
 ///   use #(new_state, _) <- result.try(
 ///     glua.run(state, glua.set(keys: ["a_number"], value: glua.int(36)))
@@ -382,7 +383,7 @@ pub fn try(result: Result(a, e), next: fn(a) -> Action(b, e)) -> Action(b, e) {
 ///   use ret <- glua.then(glua.eval(code: "local a = 1"))
 ///   use <- glua.guard(when: ret == [], return: "expected at least one value from Lua")
 ///
-///  fold(ret, glua.dereference(_, using: decode.int))
+///  glua.fold(ret, glua.dereference(_, using: decode.int))
 /// })
 /// // -> Error(glua.CustomError("expected at least one value from Lua"))
 /// ```
