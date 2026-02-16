@@ -617,8 +617,10 @@ fn do_function(fun: fn(List(Value)) -> Action(List(Value), e)) -> Value
 ///   glua.eval(code: "return 1, true")
 /// )
 ///
-/// assert glua.run(state, glua.dereference(ref: ref1, using: decode.int)) == Ok(1)
-/// assert glua.run(state, glua.dereference(ref: ref2, using: decode.bool)) == Ok(True)
+/// let assert Ok(#(_state, 1)) =
+///   glua.run(state, glua.dereference(ref: ref1, using: decode.int))
+/// let assert Ok(#(_state, True)) =
+///   glua.run(state, glua.dereference(ref: ref2, using: decode.bool))
 /// ```
 pub fn dereference(
   ref ref: Value,
@@ -957,8 +959,10 @@ fn do_load_file(lua: Lua, path: String) -> Result(#(Lua, Chunk), LuaError(e))
 ///   code: "return 'hello, world!', 10",
 /// ))
 ///
-/// assert glua.run(state, glua.dereference(ref: ref1, using: decode.string)) == "hello, world!"
-/// assert glua.run(state, glua.dereference(ref: ref2, using: decode.int)) == 10
+/// let assert Ok(#(_state, "hello world")) =
+///   glua.run(state, glua.dereference(ref: ref1, using: decode.string))
+/// let assert Ok(#(_state, 10)) =
+///   glua.run(state, glua.dereference(ref: ref2, using: decode.int))
 /// ```
 ///
 /// ```gleam
