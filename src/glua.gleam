@@ -218,18 +218,120 @@ fn format_lua_value(v: anything) -> String
 @external(erlang, "luerl_lib", "format_error")
 fn format_unknown_error(error: dynamic.Dynamic) -> String
 
+/// Represents an action that can be run within a Lua state and potentially mutates that state.
+///
+/// `Action`s are how we interact with a Lua VM and thus many functions in this library
+/// returns an `Action` when invoked. It is important to note that the execution of any `Action` is defered until
+/// you pass it to `glua.run`:
+///
+/// ```gleam
+/// // no Lua code has been evaluated or even parsed,
+/// // we're just creating an `Action`
+/// let action = glua.eval("return 1")
+///
+/// glua.run(glua.new(), action) // now our Lua code is evaluated
+/// ```
+///
+/// `Action`s *can* fail and *can* mutate the Lua state. When calling multiple `Action`s in sequence,
+/// you need to make sure each one is executed within the Lua state returned by the previous one since
+/// executing an `Action` using outdated state could lead to unexpected behaviour.
+///
+/// ```gleam
+/// let result = {
+///   use #(new_state, _) <- result.try(
+///     glua.run(state, glua.set(keys: ["a_number"], value: glua.int(36)))
+///   )
+///   use #(new_state, ret) <- result.try(
+///     glua.run(state, glua.eval("return math.sqrt(a_number)"))
+///   )
+///
+///   // we know that `math.sqrt` only returns one value
+///   let assert [ref] = ret
+///
+///   glua.run(new_state, glua.dereference(ref:, using: decode.float))
+///   |> result.map(pair.second)
+/// }
+/// result
+/// // -> Ok(6.0)
+/// ```
+///
+/// However, `glua` provides function to compose `Actions`s toghether without having to pass
+/// the state explicitly. The most common of such functions is `glua.then`, which allows us to take
+/// an existing `Action` and use its return value to construct another `Action`.
+/// `glua.then` will automatically pass the state returned by the first action to the second one
+/// and it will halt the chain as soon as any `Action` fails (like `result.try`).
+/// This is equivalent to the above example:
+///
+/// ```gleam
+/// let state = glua.new()
+/// let action = {
+///   use _ <- glua.then(glua.set(keys: ["a_number"], value: glua.int(36)))
+///   use ret <- glua.then(glua.eval(code: "return math.sqrt(a_number)"))
+///
+///   // we know that `math.sqrt` only returns one value
+///   let assert [ref] = ret
+///   glua.dereference(ref:, using: decode.float)
+/// }
+///
+/// glua.run(state, action) |> result.map(pair.second)
+/// // -> Ok(6.0)
+/// ```
+///
+/// An `Action` takes two types parameters, `return` is the type of the value that the `Action`
+/// would return in case it succeeds, and `error` is the type of custom errors that
+/// the `Action` could return.
 pub opaque type Action(return, error) {
   Action(function: fn(Lua) -> Result(#(Lua, return), LuaError(error)))
 }
 
+/// Runs an `Action` within a Lua environment.
+///
+/// ## Examples
+///
+/// ```gleam
+/// let state = glua.new()
+/// glua.run(state, {
+///   use ret <- glua.then(glua.eval("return 'Hello from Lua!'"))
+///   use ref <- glua.try(list.first(ret))
+///   glua.dereference(ref:, using: decode.string)
+/// })
+/// // -> Ok(#(_state, "Hello from Lua!"))
+/// ```
 pub fn run(
   state lua: Lua,
   action action: Action(return, error),
 ) -> Result(#(Lua, return), LuaError(error)) {
-  // drop the updated state by desing
   action.function(lua)
 }
 
+/// Composes two `Action`s into a single one, by executing the first one and passing its return value
+/// to a function that returns another `Action`.
+///
+/// If the first `Action` returns an `Error` when executed, then the function is not called
+/// and the error is returned.
+///
+/// This function is the most common way to chain together multiple `Action`s.
+///
+/// ## Examples
+///
+/// ```gleam
+/// let my_value = 1
+/// let assert Ok(#(_state, ret)) = glua.run(glua.new(), {
+///   use _ <- glua.then(glua.set(keys: ["my_value"], value: glua.int(my_value)))
+///   use ref <- glua.then(glua.get(keys: ["my_value"]))
+///   glua.dereference(ref:, using: decode.int)
+/// })
+///
+/// assert ret == my_value
+/// ```
+///
+/// ```gleam
+/// glua.run(glua.new(), {
+///   use ret <- glua.then(glua.eval_file(path: "./my_file.lua"))
+///   glua.call_function_by_name(path: ["table", "pack"], args: ret)
+/// })
+/// // -> Error(glua.FileNotFound("./my_file.lua"))
+/// ```
 pub fn then(action: Action(a, e), next: fn(a) -> Action(b, e)) -> Action(b, e) {
   use state <- Action
   use #(new, ret) <- result.try(action.function(state))
@@ -237,30 +339,122 @@ pub fn then(action: Action(a, e), next: fn(a) -> Action(b, e)) -> Action(b, e) {
   next(ret).function(new)
 }
 
+/// Transforms the provided result into an `Action` by passing its value to a function
+/// that yields an `Action`.
+///
+/// If the input is an `Error`, then the function is not called and instead a failing `Action`
+/// is returned with the original error.
+///
+/// This is a shorthand for writing a case with `glua.then`:
+///
+/// ```gleam
+/// use fun <- glua.then(glua.get(["string", "reverse"]))
+/// use return <- glua.then(glua.call_function(fun:, args: [glua.string("Hello")]))
+/// use value <- glua.try(list.first(return))
+/// glua.dereference(ref: value, using: decode.string)
+/// ```
+///
+/// as opposed to this:
+///
+/// ```gleam
+/// use fun <- glua.then(glua.get(["string", "reverse"]))
+/// use return <- glua.then(glua.call_function(fun, [glua.string("Hello")]))
+/// case return {
+///   [first] -> glua.dereference(ref: first, using: decode.string)
+///   _ -> glua.failure(Nil)
+/// }
+/// ```
+pub fn try(result: Result(a, e), next: fn(a) -> Action(b, e)) -> Action(b, e) {
+  case result {
+    Ok(ret) -> Action(next(ret).function)
+    Error(err) -> failure(err)
+  }
+}
+
+/// Creates an `Action` that always succeeds and returns `value`.
+///
+/// ## Examples
+///
+/// ```gleam
+/// glua.run(glua.new(), glua.success("my value"))
+/// // -> Ok(#(_state, "my_value"))
+/// ```
 pub fn success(value: a) -> Action(a, e) {
   use state <- Action
   Ok(#(state, value))
 }
 
+/// Creates an `Action` that always fails with `glua.CustomError(error)`.
+///
+/// ## Examples
+///
+/// ```gleam
+/// glua.run(
+///   glua.new(),
+///   glua.failure("incorrect number of return values")
+/// )
+/// // -> Error(glua.CustomError("incorrect number of return values"))
+/// ```
 pub fn failure(error: e) -> Action(a, e) {
   use _ <- Action
   Error(CustomError(error))
 }
 
+/// Invokes the Lua `error` function with the provided message.
 pub fn error(message: String) -> Action(List(Value), e) {
   call_function_by_name(["error"], [string(message)])
 }
 
+/// Invokes the Lua `error` function with the provided message and code.
 pub fn error_with_code(message: String, code: Int) -> Action(List(Value), e) {
   call_function_by_name(["error"], [string(message), int(code)])
 }
 
+/// Transforms the return value of an `Action` with the provided function.
+///
+/// If the `Action` returns an `Error` when executed then the function is not called and the
+/// error is returned.
+///
+/// ## Examples
+///
+/// ```gleam
+/// glua.run(glua.new(), {
+///   use ref <- glua.then(glua.get(keys: ["_VERSION"]))
+///   use version <- glua.map(glua.dereference(ref:, using: decode.string))
+///   "glua supports " <> version
+/// })
+/// // -> Ok(#(_state, "glua supports Lua 5.3"))
+/// ```
+///
+/// ```gleam
+/// glua.run(glua.new(), {
+///   use n <- glua.map(glua.get(keys: ["my_number"]))
+///   n * 2
+/// })
+/// // -> Error(glua.KeyNotFound(["my_number"]))
+/// ```
 pub fn map(over action: Action(a, e), with fun: fn(a) -> b) -> Action(b, e) {
   use state <- Action
   action.function(state)
   |> result.map(pair.map_second(_, fun))
 }
 
+/// Maps a list of elements into a list of `Action`s by calling a function in each element and then flattens
+/// all the `Action`s into a single one.
+///
+/// ## Examples
+///
+/// ```gleam
+/// let numbers = [9, 16, 25]
+/// let keys = ["math", "sqrt"]
+/// glua.run(glua.new(), glua.fold(numbers, fn(n) {
+///   use ret <- glua.then(glua.call_function_by_name(keys:, args: [glua.int(n)]))
+///
+///   let assert [ref] = ret
+///   glua.dereference(ref:, using: decode.float)
+/// }))
+/// // -> Ok(#(_state, [3.0, 4.0, 5.0]))
+/// ```
 pub fn fold(
   over list: List(a),
   with fun: fn(a) -> Action(b, e),
@@ -316,6 +510,12 @@ pub fn table_decoder(
   decode.list(of: inner)
 }
 
+/// Encodes a Gleam function into a Lua function.
+///
+/// > **Note**: The function to be encoded has to return an `Action` with a `Never` type
+/// > as the `error` parameter, meaning that the function cannot invoke `glua.failure` in its body.
+/// > If you want to return an error inside that function, you should use `glua.error` or `glua.error_with_code`,
+/// > both of which will call the Lua `error` function.
 pub fn function(f: fn(List(Value)) -> Action(List(Value), Never)) -> Value {
   do_function(f)
 }
@@ -921,33 +1121,4 @@ pub fn call_function_by_name(
 ) -> Action(List(Value), e) {
   use fun <- then(get(keys))
   call_function(fun, args)
-}
-
-/// If the input is `Ok`, it passes its value to a function that yields an
-/// `Action`, and returns the yielded `Action`.
-///
-/// If the input is an `Error`, the function is not called and
-/// a failing `Action` is returned with the original error.
-///
-/// This is a shorthand for writing a case with `glua.then`
-///
-/// ## Example
-/// ```gleam
-/// use return <- glua.then(glua.call_function(fun, [glua.string("Hello")]))
-/// use value <- glua.try(list.first(return))
-/// ```
-///
-/// As opposed to this
-///
-/// ```gleam
-/// use return <- glua.then(glua.call_function(fun, [glua.string("Hello")]))
-/// use value <- glua.then(case return {
-///   [first] -> first
-///   _ -> "Error getting first return value"
-/// })
-pub fn try(result: Result(a, e), next: fn(a) -> Action(b, e)) -> Action(b, e) {
-  case result {
-    Ok(ret) -> Action(next(ret).function)
-    Error(err) -> failure(err)
-  }
 }
