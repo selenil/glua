@@ -429,9 +429,9 @@ pub fn error(message: String) -> Action(List(Value), e) {
   call_function_by_name(["error"], [string(message)])
 }
 
-/// Invokes the Lua `error` function with the provided message and code.
-pub fn error_with_code(message: String, code: Int) -> Action(List(Value), e) {
-  call_function_by_name(["error"], [string(message), int(code)])
+/// Invokes the Lua `error` function with the provided message and level.
+pub fn error_with_level(message: String, level: Int) -> Action(List(Value), e) {
+  call_function_by_name(["error"], [string(message), int(level)])
 }
 
 /// Transforms the return value of an `Action` with the provided function.
