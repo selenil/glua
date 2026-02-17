@@ -583,6 +583,39 @@ pub fn call_function_returns_proper_errors_test() {
   )) = glua.run(glua.new(), action)
 
   assert value == "1"
+
+  let fun =
+    fn(args) {
+      case args {
+        [a] -> glua.success([a])
+        _ -> glua.error("called without arguments")
+      }
+    }
+    |> glua.function
+
+  let assert Error(glua.LuaRuntimeException(
+    exception: glua.ErrorCall(message: msg, level: option.None),
+    state: _,
+  )) = glua.run(glua.new(), glua.call_function(fun, []))
+
+  assert msg == "called without arguments"
+
+  let fun =
+    fn(args) {
+      case args {
+        [] -> glua.success([])
+        _ -> glua.error_with_level("function takes 0 arguments", 1)
+      }
+    }
+    |> glua.function
+
+  let assert Error(glua.LuaRuntimeException(
+    exception: glua.ErrorCall(message: msg, level: option.Some(level)),
+    state: _,
+  )) = glua.run(glua.new(), glua.call_function(fun, [glua.int(2)]))
+
+  assert msg == "function takes 0 arguments"
+  assert level == 1
 }
 
 pub fn call_function_by_name_test() {
@@ -672,4 +705,7 @@ pub fn format_error_test() {
   }
   let assert Error(e) = glua.run(glua.new(), action)
   assert glua.format_error(e) == "Expected String, but found Int"
+
+  let assert Error(e) = glua.run(glua.new(), glua.failure(1))
+  assert glua.format_error(e) == "1"
 }
