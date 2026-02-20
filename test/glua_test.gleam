@@ -1,9 +1,11 @@
 import gleam/dict
 import gleam/dynamic/decode
+import gleam/float
 import gleam/int
 import gleam/list
 import gleam/option
 import gleam/pair
+import gleam/result
 import gleeunit
 import glua
 
@@ -111,12 +113,64 @@ pub fn new_sandboxed_test() {
     let code = "local s = require 'example'; return s"
     use ref <- glua.then(glua.eval(code))
     use ref <- glua.try(list.first(ref))
-    use result <- glua.then(glua.dereference(ref:, using: decode.string))
+    use result <- glua.map(glua.dereference(ref:, using: decode.string))
 
     assert result == "LUA IS AN EMBEDDABLE LANGUAGE"
     glua.success(Nil)
   }
   let assert Ok(_) = glua.run(lua, action)
+}
+
+pub fn guard_test() {
+  let action = {
+    use ret <- glua.then(
+      glua.call_function_by_name(keys: ["math", "sqrt"], args: [glua.float(9.0)]),
+    )
+    use ref <- glua.try(list.first(ret))
+
+    use n <- glua.then(glua.dereference(ref:, using: decode.float))
+    use <- glua.guard(when: n <. 0.0, return: Nil)
+
+    glua.success("the root square of 9.0 is " <> float.to_string(n))
+  }
+
+  assert glua.run(glua.new(), action) |> result.map(pair.second)
+    == Ok("the root square of 9.0 is 3.0")
+
+  let action = {
+    use ret <- glua.then(glua.eval(code: "local a = 1"))
+    use <- glua.guard(
+      when: ret == [],
+      return: "Expected at least one return value",
+    )
+
+    glua.success("unreachable")
+  }
+
+  assert glua.run(glua.new(), action)
+    == Error(glua.CustomError("Expected at least one return value"))
+}
+
+pub fn map_test() {
+  let action =
+    glua.get(keys: ["math", "pi"])
+    |> glua.then(glua.dereference(_, using: decode.float))
+    |> glua.map(float.truncate)
+
+  assert glua.run(glua.new(), action) |> result.map(pair.second) == Ok(3)
+
+  let action = {
+    use ret <- glua.then(glua.eval("return 3 * true"))
+    use ref <- glua.try(list.first(ret))
+
+    glua.map(glua.dereference(ref:, using: decode.int), fn(n) {
+      "the result is " <> int.to_string(n)
+    })
+  }
+  let assert Error(glua.LuaRuntimeException(exception, _state)) =
+    glua.run(glua.new(), action)
+
+  assert exception == glua.BadArith("*", ["3", "true"])
 }
 
 pub fn encoding_and_decoding_nested_tables_test() {
