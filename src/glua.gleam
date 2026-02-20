@@ -556,6 +556,20 @@ pub fn function(f: fn(List(Value)) -> Action(List(Value), Never)) -> Value {
 /// to encourage using `glua.error` instead since `glua.failure` wouldn't make sense in that case.
 pub type Never
 
+pub fn function_decoder() -> decode.Decoder(
+  fn(List(Value)) -> Action(List(Value), e),
+) {
+  decode.new_primitive_decoder("LuaFunction", decode_lua_function)
+}
+
+@external(erlang, "glua_ffi", "decode_fun")
+fn decode_lua_function(
+  v: dynamic.Dynamic,
+) -> Result(
+  fn(List(Value)) -> Action(List(Value), e),
+  fn(List(Value)) -> Action(List(Value), e),
+)
+
 pub fn list(encoder: fn(a) -> Value, values: List(a)) -> List(Value) {
   list.map(values, encoder)
 }

@@ -763,3 +763,146 @@ pub fn format_error_test() {
   let assert Error(e) = glua.run(glua.new(), glua.failure(1))
   assert glua.format_error(e) == "1"
 }
+
+pub fn decode_function_test() {
+  let lua_sqrt = {
+    use ref <- glua.then(glua.get(keys: ["math", "sqrt"]))
+    glua.dereference(ref:, using: glua.function_decoder())
+  }
+
+  let assert Ok(_) =
+    glua.run(glua.new(), {
+      use fun <- glua.then(lua_sqrt)
+      use ret <- glua.then(fun([glua.int(9)]))
+      use ref <- glua.try(list.first(ret))
+      use result <- glua.map(glua.dereference(ref:, using: decode.float))
+
+      assert result == 3.0
+      Nil
+    })
+
+  let assert Error(glua.LuaRuntimeException(_, _)) =
+    glua.run(glua.new(), {
+      use fun <- glua.then(lua_sqrt)
+      fun([])
+    })
+
+  let code =
+    "
+  local function fold(tbl, initial, cb)
+    local acc = initial
+    for _, v in ipairs(tbl) do
+      local new_acc = cb(acc, v)
+      acc = new_acc
+   end
+   return acc
+  end
+
+  return fold
+"
+
+  let lua_fold = {
+    use ret <- glua.then(glua.eval(code:))
+    use ref <- glua.try(list.first(ret))
+    glua.dereference(ref:, using: glua.function_decoder())
+  }
+
+  let assert Ok(_) =
+    glua.run(glua.new(), {
+      use tbl <- glua.then(
+        list.index_map([3, 9, 27], fn(x, i) { #(glua.int(i + 1), glua.int(x)) })
+        |> glua.table,
+      )
+
+      let callback =
+        fn(args) {
+          use args <- glua.map(glua.fold(args, glua.dereference(_, decode.int)))
+          let assert [acc, v] = args
+          glua.int(acc * v)
+          |> list.wrap
+        }
+        |> glua.function
+
+      use fun <- glua.then(lua_fold)
+      use ret <- glua.then(fun([tbl, glua.int(1), callback]))
+      use ref <- glua.try(list.first(ret))
+      use result <- glua.map(glua.dereference(ref:, using: decode.int))
+      assert result == 729
+      Nil
+    })
+
+  let assert Error(glua.LuaRuntimeException(exn, _)) =
+    glua.run(glua.new(), {
+      use fun <- glua.then(lua_fold)
+      use tbl <- glua.then(
+        list.index_map([3, 9, 27], fn(x, i) { #(glua.int(i + 1), glua.int(x)) })
+        |> glua.table,
+      )
+      fun([tbl, glua.int(1)])
+    })
+  assert exn == glua.UndefinedFunction("nil")
+
+  let lua_table_unpack = {
+    use ref <- glua.then(glua.get(keys: ["table", "unpack"]))
+    glua.dereference(ref:, using: glua.function_decoder())
+  }
+
+  let assert Ok(_) =
+    glua.run(glua.new(), {
+      use fun <- glua.then(lua_table_unpack)
+      use tbl <- glua.then(
+        ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]
+        |> list.index_map(fn(l, i) { #(glua.int(i + 1), glua.string(l)) })
+        |> glua.table,
+      )
+
+      use ret <- glua.then(fun([tbl, glua.int(4), glua.int(8)]))
+      use result <- glua.then(
+        glua.fold(ret, glua.dereference(_, using: decode.string)),
+      )
+
+      assert result == ["d", "e", "f", "g", "h"]
+
+      use ret <- glua.then(fun([tbl, glua.int(8)]))
+      use result <- glua.then(
+        glua.fold(ret, glua.dereference(_, using: decode.string)),
+      )
+      assert result == ["h", "i", "j"]
+      glua.success(Nil)
+    })
+
+  let assert Error(glua.LuaRuntimeException(_, _)) =
+    glua.run(glua.new(), {
+      use fun <- glua.then(lua_table_unpack)
+      fun([])
+    })
+
+  let code = "return function() error('some error') end"
+
+  let assert Error(glua.LuaRuntimeException(exn, _)) =
+    glua.run(glua.new(), {
+      use ret <- glua.then(glua.eval(code:))
+      use ref <- glua.try(list.first(ret))
+      use fun <- glua.then(glua.dereference(
+        ref:,
+        using: glua.function_decoder(),
+      ))
+      fun([])
+    })
+
+  assert exn == glua.ErrorCall("some error", option.None)
+
+  let code = "return function() return 3 * true end"
+  let assert Error(glua.LuaRuntimeException(exn, _)) =
+    glua.run(glua.new(), {
+      use ret <- glua.then(glua.eval(code:))
+      use ref <- glua.try(list.first(ret))
+      use fun <- glua.then(glua.dereference(
+        ref:,
+        using: glua.function_decoder(),
+      ))
+      fun([])
+    })
+
+  assert exn == glua.BadArith("*", ["3", "true"])
+}

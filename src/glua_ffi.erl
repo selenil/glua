@@ -3,9 +3,10 @@
 -import(ttdict, [fold/3]).
 -include_lib("luerl/include/luerl.hrl").
 
--export([get_stacktrace/1, dereference/2, coerce/1, coerce_nil/0, wrap_fun/1, sandbox_fun/1, get_table_keys/2,
+-export([get_stacktrace/1, dereference/2, coerce/1, coerce_nil/0, wrap_fun/1, decode_fun/1, sandbox_fun/1, get_table_keys/2,
          get_private/2, set_table_keys/3, load/2, load_file/2, eval/2, eval_file/2,
          eval_chunk/2, call_function/3]).
+
 
 %% helper to convert luerl return values to a format
 %% that is more suitable for use in Gleam code
@@ -39,11 +40,11 @@ dereference(#usdref{}=U, St, _In) ->
     {#userdata{d=Data},_} = luerl_heap:get_userdata(U, St),
     Data;
 dereference(#funref{}=Fun, _St, _In) ->
-    dereference_fun(Fun);
+    dereference_fun(fun(Args, State) -> luerl_emul:functioncall(Fun, Args, State) end);
 dereference(#erl_func{code=Fun}, _St, _In) ->
     Fun;                                       %Just the bare fun
 dereference(#erl_mfa{m=M, f=F}, _St, _In) ->
-    dereference_fun(fun(Args, St0) -> M:F(nil, Args, St0) end);
+    dereference_fun(fun(Args, State) -> M:F(nil, Args, State) end);
 dereference(Lua, _, _) -> error({badarg,Lua}).       %Shouldn't have anything else
 
 dereference_table(#tref{i=N}=T, St, In0) ->
@@ -70,13 +71,15 @@ dereference_table(#tref{i=N}=T, St, In0) ->
     end.
 
 dereference_fun(F) when is_function(F, 2) ->
-    {luafun, fun(St0, Args) ->
-        try
-            {Ret, St1} = F(Args, St0),
-            {ok, {St1, Ret}}
-        catch
-            error:{lua_error, _, _} = Err -> {error, map_error(Err)}
-        end
+    {luafun, fun(Args) ->
+        {action, fun(St0) ->
+            try
+                {Ret, St1} = F(Args, St0),
+                {ok, {St1, Ret}}
+            catch
+                error:{lua_error, _, _} = Err -> {error, map_error(Err)}
+            end
+        end}
     end}.
 
 map_error({error, Errors, _}) ->
@@ -228,6 +231,12 @@ sandbox_fun(Msg) ->
     {erl_func, fun(_, State) ->
         {error, map_error(lua_error({error_call, [Msg]}, State))}
     end}.
+
+decode_fun(Fun) ->
+    case Fun of
+        {luafun, F} -> {ok, F};
+        _ -> {error, fun(_) -> {action, fun(State) -> {ok, {State, nil}} end} end}
+    end.
 
 get_table_keys(Lua, Keys) ->
     case luerl:get_table_keys(Keys, Lua) of
