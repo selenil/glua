@@ -239,9 +239,11 @@ decode_fun(Fun) ->
     end.
 
 get_table_key(Lua, Tref, Key) ->
-    case luerl_emul:get_table_key(Tref, Key, Lua) of
+    try luerl_emul:get_table_key(Tref, Key, Lua) of
         {nil, _St} -> {error, {key_not_found, [Key]}};
         {Value, St} -> {ok, {St, Value}}
+    catch
+        error:{lua_error, _, _} = Err -> {error, map_error(Err)}
     end.
 
 get_table_keys(Lua, Keys) ->
@@ -255,9 +257,11 @@ get_table_keys(Lua, Keys) ->
     end.
 
 set_table_key(Lua, Tref, Key, Value) ->
-    case luerl_emul:set_table_key(Tref, Key, Value, Lua) of
-        {lua_error, _, _} = Err -> {error, map_error(Err)};
-        St -> {ok, {St, nil}}
+    try
+        St = luerl_emul:set_table_key(Tref, Key, Value, Lua),
+        {ok, {St, nil}}
+    catch
+        error:{lua_error, _, _} = Err -> {error, map_error(Err)}
     end.
 
 set_table_keys(Lua, Keys, Value) ->
