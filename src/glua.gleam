@@ -556,6 +556,8 @@ pub fn function(f: fn(List(Value)) -> Action(List(Value), Never)) -> Value {
 /// to encourage using `glua.error` instead since `glua.failure` wouldn't make sense in that case.
 pub type Never
 
+pub type Function
+
 pub fn function_decoder() -> decode.Decoder(
   fn(List(Value)) -> Action(List(Value), e),
 ) {
