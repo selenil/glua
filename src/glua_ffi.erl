@@ -3,8 +3,8 @@
 -import(ttdict, [fold/3]).
 -include_lib("luerl/include/luerl.hrl").
 
--export([get_stacktrace/1, dereference/2, coerce/1, coerce_nil/0, wrap_fun/1, decode_fun/1, sandbox_fun/1, get_table_keys/2,
-         get_private/2, set_table_keys/3, load/2, load_file/2, eval/2, eval_file/2,
+-export([get_stacktrace/1, dereference/2, coerce/1, coerce_nil/0, wrap_fun/1, decode_fun/1, sandbox_fun/1, get_table_key/3,
+         get_table_keys/2, get_private/2, set_table_key/4, set_table_keys/3, load/2, load_file/2, eval/2, eval_file/2,
          eval_chunk/2, call_function/3]).
 
 
@@ -238,6 +238,12 @@ decode_fun(Fun) ->
         _ -> {error, fun(_) -> {action, fun(State) -> {ok, {State, nil}} end} end}
     end.
 
+get_table_key(Lua, Tref, Key) ->
+    case luerl_emul:get_table_key(Tref, Key, Lua) of
+        {nil, _St} -> {error, {key_not_found, [Key]}};
+        {Value, St} -> {ok, {St, Value}}
+    end.
+
 get_table_keys(Lua, Keys) ->
     case luerl:get_table_keys(Keys, Lua) of
         {ok, nil, _} ->
@@ -246,6 +252,12 @@ get_table_keys(Lua, Keys) ->
             {ok, Value};
         Other ->
             to_gleam(Other)
+    end.
+
+set_table_key(Lua, Tref, Key, Value) ->
+    case luerl_emul:set_table_key(Tref, Key, Value, Lua) of
+        {lua_error, _, _} = Err -> {error, map_error(Err)};
+        St -> {ok, {St, nil}}
     end.
 
 set_table_keys(Lua, Keys, Value) ->

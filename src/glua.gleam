@@ -1164,3 +1164,30 @@ pub fn call_function_by_name(
   use fun <- then(get(keys))
   call_function(fun, args)
 }
+
+pub fn index(table ref: Value, key key: String) -> Action(Value, e) {
+  Action(do_index(_, ref, key))
+}
+
+@external(erlang, "glua_ffi", "get_table_key")
+fn do_index(
+  state: Lua,
+  ref: Value,
+  key: String,
+) -> Result(#(Lua, Value), LuaError(e))
+
+pub fn new_index(
+  table ref: Value,
+  key key: String,
+  value val: Value,
+) -> Action(Nil, e) {
+  Action(do_new_index(_, ref, key, val))
+}
+
+@external(erlang, "glua_ffi", "set_table_key")
+fn do_new_index(
+  state: Lua,
+  ref: Value,
+  key: String,
+  val: Value,
+) -> Result(#(Lua, Nil), LuaError(e))
