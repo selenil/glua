@@ -11,9 +11,11 @@ import gleam/option
 import gleam/pair
 import gleam/result
 import gleam/string
+import glua/deser
+import glua/internal/glua as internal
 
-/// Represents an instance of the Lua VM.
-pub type Lua
+pub type Lua =
+  internal.Lua
 
 /// Represents the errors than can happend during the parsing and execution of Lua code
 pub type LuaError(error) {
@@ -25,8 +27,9 @@ pub type LuaError(error) {
   KeyNotFound(key: List(String))
   /// A Lua source file was not found
   FileNotFound(path: String)
-  /// The value returned by the Lua environment could not be decoded using the provided decoder.
-  UnexpectedResultType(List(decode.DecodeError))
+  /// The value returned by the Lua environment could not be deserialized using the provided deserializer.
+  UnexpectedResultType(List(deser.DeserializeError))
+  UnexpectedPrivateType(List(decode.DecodeError))
   /// An app-defined error
   CustomError(error: error)
   /// An error that could not be identified.
@@ -136,8 +139,11 @@ pub fn format_error(error: LuaError(e)) -> String {
       "Key " <> "\"" <> string.join(path, with: ".") <> "\"" <> " not found"
     FileNotFound(path) ->
       "Lua source file " <> "\"" <> path <> "\"" <> " not found"
-    UnexpectedResultType(decode_errors) ->
-      list.map(decode_errors, format_decode_error) |> string.join(with: "\n")
+    UnexpectedResultType(deser_errs) ->
+      list.map(deser_errs, format_deser_error) |> string.join(with: "\n")
+    UnexpectedPrivateType(decode_errs) ->
+      list.map(decode_errs, format_decode_error) |> string.join(with: "\n")
+
     CustomError(error) -> string.inspect(error)
     UnknownError(error) -> "Unknown error: " <> format_unknown_error(error)
   }
@@ -210,6 +216,16 @@ fn format_decode_error(error: decode.DecodeError) -> String {
   case error.path {
     [] -> base
     path -> base <> " at " <> string.join(path, with: ".")
+  }
+}
+
+fn format_deser_error(error: deser.DeserializeError) -> String {
+  let base = "Expected " <> error.expected <> ", but found " <> error.found
+
+  case error.path {
+    [] -> base
+    path ->
+      base <> " at " <> string.join(list.map(path, string.inspect), with: ".")
   }
 }
 
@@ -496,7 +512,8 @@ pub fn fold(
 pub type Chunk
 
 /// Represents a value that can be passed to the Lua environment.
-pub type Value
+pub type Value =
+  internal.Value
 
 @external(erlang, "glua_ffi", "coerce_nil")
 pub fn nil() -> Value
@@ -556,7 +573,8 @@ pub fn function(f: fn(List(Value)) -> Action(List(Value), Never)) -> Value {
 /// to encourage using `glua.error` instead since `glua.failure` wouldn't make sense in that case.
 pub type Never
 
-pub type Function
+pub type Function =
+  internal.Function
 
 pub fn function_decoder() -> decode.Decoder(
   fn(List(Value)) -> Action(List(Value), e),
@@ -637,51 +655,9 @@ fn do_userdata(v: anything, lua: Lua) -> #(Value, Lua)
 @external(erlang, "glua_ffi", "wrap_fun")
 fn do_function(fun: fn(List(Value)) -> Action(List(Value), e)) -> Value
 
-/// Converts a reference to a Lua value into type-safe Gleam data using the provided decoder.
-///
-/// ## Examples
-///
-/// ```gleam
-/// glua.run(glua.new(), { 
-///   use ret <- glua.then(glua.eval(code: "return 'Hello from Lua!'"))
-///   use ref <- glua.try(list.first(ret))
-///
-///   glua.dereference(ref:, using: decode.string)
-/// }
-/// // -> Ok(#(_state, "Hello from Lua!"))
-/// ```
-///
-/// ```gleam
-/// let assert Ok(#(state, [ref1, ref2])) = glua.run(
-///   glua.new(),
-///   glua.eval(code: "return 1, true")
-/// )
-///
-/// let assert Ok(#(_state, 1)) =
-///   glua.run(state, glua.dereference(ref: ref1, using: decode.int))
-/// let assert Ok(#(_state, True)) =
-///   glua.run(state, glua.dereference(ref: ref2, using: decode.bool))
-/// ```
-pub fn dereference(
-  ref ref: Value,
-  using decoder: decode.Decoder(a),
-) -> Action(a, e) {
-  use state <- Action
-  use ret <- result.map(
-    do_dereference(state, ref)
-    |> decode.run(decoder)
-    |> result.map_error(UnexpectedResultType),
-  )
-
-  #(state, ret)
-}
-
-@external(erlang, "glua_ffi", "dereference")
-fn do_dereference(lua: Lua, ref: Value) -> dynamic.Dynamic
-
 pub fn returning(
   action act: Action(Value, e),
-  using decoder: decode.Decoder(a),
+  using decoder: deser.Deserializer(a),
 ) -> Action(a, e) {
   use ref <- then(act)
   dereference(ref, decoder)
@@ -689,7 +665,7 @@ pub fn returning(
 
 pub fn returning_list(
   action act: Action(List(Value), e),
-  using decoder: decode.Decoder(a),
+  using decoder: deser.Deserializer(a),
 ) -> Action(List(a), e) {
   use refs <- then(act)
   fold(refs, dereference(_, decoder))
@@ -815,7 +791,7 @@ pub fn get_private(
   using decoder: decode.Decoder(a),
 ) -> Result(a, LuaError(e)) {
   use value <- result.try(do_get_private(lua, key))
-  decode.run(value, decoder) |> result.map_error(UnexpectedResultType)
+  decode.run(value, decoder) |> result.map_error(UnexpectedPrivateType)
 }
 
 @external(erlang, "glua_ffi", "get_private")
@@ -1165,4 +1141,42 @@ pub fn call_function_by_name(
 ) -> Action(List(Value), e) {
   use fun <- then(get(keys))
   call_function(fun, args)
+}
+
+/// Converts a reference to a Lua value into type-safe Gleam data using the provided decoder.
+///
+/// ## Examples
+///
+/// ```gleam
+/// glua.run(glua.new(), { 
+///   use ret <- glua.then(glua.eval(code: "return 'Hello from Lua!'"))
+///   use ref <- glua.try(list.first(ret))
+///
+///   glua.dereference(ref:, using: decode.string)
+/// }
+/// // -> Ok(#(_state, "Hello from Lua!"))
+/// ```
+///
+/// ```gleam
+/// let assert Ok(#(state, [ref1, ref2])) = glua.run(
+///   glua.new(),
+///   glua.eval(code: "return 1, true")
+/// )
+///
+/// let assert Ok(#(_state, 1)) =
+///   glua.run(state, glua.dereference(ref: ref1, using: decode.int))
+/// let assert Ok(#(_state, True)) =
+///   glua.run(state, glua.dereference(ref: ref2, using: decode.bool))
+/// ```
+pub fn dereference(
+  ref ref: Value,
+  using deserializer: deser.Deserializer(a),
+) -> Action(a, e) {
+  use state <- Action
+  use ret <- result.map(
+    deser.run(state, ref, deserializer)
+    |> result.map_error(UnexpectedResultType),
+  )
+
+  #(state, ret)
 }

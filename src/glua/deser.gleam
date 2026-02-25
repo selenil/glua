@@ -12,7 +12,9 @@ import gleam/int
 import gleam/list
 import gleam/option.{type Option}
 import gleam/string
-import glua.{type Lua, type Value}
+import glua/internal/glua.{type Function, type Lua, type Value}
+
+// import glua.{type DeserializeError, type Lua, type Value, DeserializeError}
 
 pub opaque type Deserializer(t) {
   Deserializer(function: fn(Lua, Value) -> Return(t))
@@ -93,6 +95,7 @@ fn index_into(
   }
 }
 
+@internal
 pub fn run(
   lua: Lua,
   data: Value,
