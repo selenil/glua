@@ -5,7 +5,7 @@
 
 -export([get_stacktrace/1, dereference/2, coerce/1, coerce_nil/0, wrap_fun/1, decode_fun/1, sandbox_fun/1, get_table_keys/2,
          get_private/2, set_table_keys/3, load/2, load_file/2, eval/2, eval_file/2,
-         eval_chunk/2, call_function/3]).
+         eval_chunk/2, call_function/3, hijack_decoder/1]).
 
 
 %% helper to convert luerl return values to a format
@@ -283,3 +283,7 @@ get_private(Lua, Key) ->
         error:{badkey, _} ->
             {error, {key_not_found, [Key]}}
     end.
+
+hijack_decoder({decoder, Func}) ->
+    Func
+    
