@@ -7,6 +7,7 @@ import gleam/bit_array
 import gleam/bool
 import gleam/dict.{type Dict}
 import gleam/dynamic
+import gleam/dynamic/decode
 import gleam/float
 import gleam/int
 import gleam/list
@@ -26,6 +27,32 @@ pub type DeserializeError {
 
 type Return(t) =
   #(t, List(DeserializeError))
+
+pub fn from_decoder(decoder: decode.Decoder(a)) {
+  Deserializer(function: fn(lua, value) {
+    let dyn = do_dereference(lua, value)
+    case hijack_decoder(decoder)(dyn) {
+      #(ok, []) -> #(ok, [])
+      #(zero, errs) -> #(zero, list.map(errs, decode_to_deser_error))
+    }
+  })
+}
+
+@external(erlang, "glua_ffi", "dereference")
+fn do_dereference(lua: Lua, ref: Value) -> dynamic.Dynamic
+
+@external(erlang, "glua_ffi", "dereference")
+fn hijack_decoder(
+  decoder: decode.Decoder(a),
+) -> fn(dynamic.Dynamic) -> #(a, List(decode.DecodeError))
+
+fn decode_to_deser_error(error: decode.DecodeError) {
+  DeserializeError(
+    error.expected,
+    error.found,
+    error.path |> list.map(glua.string),
+  )
+}
 
 pub fn field(
   field_path: Value,
