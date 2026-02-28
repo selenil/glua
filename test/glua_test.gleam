@@ -8,6 +8,7 @@ import gleam/pair
 import gleam/result
 import gleeunit
 import glua
+import glua/lib
 
 pub fn main() -> Nil {
   gleeunit.main()
@@ -905,4 +906,145 @@ pub fn decode_function_test() {
     })
 
   assert exn == glua.BadArith("*", ["3", "true"])
+}
+
+pub fn index_test() {
+  let assert Ok(#(state, tbl)) =
+    glua.run(glua.new(), {
+      glua.table([#(glua.string("a_key"), glua.string("a value"))])
+    })
+
+  assert glua.run(
+      state,
+      glua.index(tbl, "a_key") |> glua.returning(decode.string),
+    )
+    |> result.map(pair.second)
+    == Ok("a value")
+
+  assert glua.run(state, {
+      use tbl <- glua.then(
+        glua.table([#(glua.string("a_key"), glua.string("a value"))]),
+      )
+      glua.index(tbl, "other_key")
+    })
+    == Error(glua.KeyNotFound(["other_key"]))
+
+  let assert Ok(#(state, tbl)) =
+    glua.run(glua.new(), {
+      use tbl <- glua.then(glua.table([]))
+      use mt <- glua.then(
+        glua.table([
+          #(
+            glua.string("__index"),
+            glua.function(fn(args) {
+              let assert [_table, key] = args
+
+              use k <- glua.then(glua.dereference(key, decode.string))
+              case int.parse(k) {
+                Ok(_) -> "integer"
+                Error(_) -> "other"
+              }
+              |> glua.string
+              |> list.wrap
+              |> glua.success
+            }),
+          ),
+        ]),
+      )
+
+      use _ <- glua.then(
+        glua.call_function_by_name(["setmetatable"], [tbl, mt]),
+      )
+      glua.success(tbl)
+    })
+
+  assert glua.run(state, glua.index(tbl, "1") |> glua.returning(decode.string))
+    |> result.map(pair.second)
+    == Ok("integer")
+
+  assert glua.run(state, glua.index(tbl, "a") |> glua.returning(decode.string))
+    |> result.map(pair.second)
+    == Ok("other")
+
+  assert glua.run(state, glua.index(tbl, "2") |> glua.returning(decode.int))
+    |> result.map(pair.second)
+    == Error(
+      glua.UnexpectedResultType([decode.DecodeError("Int", "String", [])]),
+    )
+}
+
+pub fn new_index_test() {
+  let assert Ok(#(state, tbl)) = glua.run(glua.new(), { glua.table([]) })
+
+  assert glua.run(state, {
+      use _ <- glua.then(glua.new_index(tbl, "a_key", glua.int(1)))
+      use ref <- glua.then(glua.index(tbl, "a_key"))
+      glua.dereference(ref, decode.int)
+    })
+    |> result.map(pair.second)
+    == Ok(1)
+
+  let assert Ok(#(state, tbl)) =
+    glua.run(glua.new(), {
+      use tbl <- glua.then(glua.table([]))
+      use mt <- glua.then(
+        glua.table([
+          #(
+            glua.string("__newindex"),
+            glua.function(fn(args) {
+              let assert [table, key, value] = args
+
+              use i <- glua.then(glua.dereference(value, decode.int))
+
+              let value = glua.int(i * i)
+              glua.call_function(lib.raw_set(), [table, key, value])
+            }),
+          ),
+        ]),
+      )
+
+      use _ <- glua.then(
+        glua.call_function_by_name(["setmetatable"], [tbl, mt]),
+      )
+      glua.success(tbl)
+    })
+
+  assert glua.run(state, {
+      use _ <- glua.then(glua.new_index(tbl, "a_key", glua.int(6)))
+      use ref <- glua.then(glua.index(tbl, "a_key"))
+      glua.dereference(ref, decode.int)
+    })
+    |> result.map(pair.second)
+    == Ok(36)
+
+  assert glua.run(state, {
+      use _ <- glua.then(glua.new_index(tbl, "other_key", glua.int(7)))
+      use ref <- glua.then(glua.index(tbl, "other_key"))
+      glua.dereference(ref, decode.int)
+    })
+    |> result.map(pair.second)
+    == Ok(49)
+
+  let assert Ok(#(state, tbl)) =
+    glua.run(glua.new(), {
+      use tbl <- glua.then(glua.table([]))
+      use mt <- glua.then(
+        glua.table([
+          #(
+            glua.string("__newindex"),
+            glua.function(fn(_) { glua.error("read-only table") }),
+          ),
+        ]),
+      )
+
+      use _ <- glua.then(
+        glua.call_function_by_name(["setmetatable"], [tbl, mt]),
+      )
+      glua.success(tbl)
+    })
+
+  let assert Error(glua.LuaRuntimeException(
+    exception: glua.ErrorCall(message: "read-only table", level: _),
+    state: _,
+  )) = glua.run(state, glua.new_index(tbl, "my_key", glua.string("my value")))
 }

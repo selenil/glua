@@ -1164,3 +1164,73 @@ pub fn call_function_by_name(
   use fun <- then(get(keys))
   call_function(fun, args)
 }
+
+/// Gets the value at `keys` under the provided table.
+///
+/// This might trigger the `__index` metamethod.
+///
+/// ## Examples
+///
+/// ```gleam
+/// glua.run(glua.new(), {
+///   let fun = fn(_) {
+///     glua.success([glua.string("fixed value")])
+///   }
+///
+///   use tbl <- glua.then(glua.table([]))
+///   use mt <- glua.then(glua.table([#(glua.string("__index"), glua.function(fun))]))
+///   use _ <- glua.then(glua.call_function(lib.set_metatable(), [tbl, mt]))
+///
+///   glua.index(tbl, "a_key")
+/// })
+/// // -> Ok(#(_state, ["fixed value"]))
+/// ```
+pub fn index(table ref: Value, key key: String) -> Action(Value, e) {
+  Action(do_index(_, ref, key))
+}
+
+@external(erlang, "glua_ffi", "get_table_key")
+fn do_index(
+  state: Lua,
+  ref: Value,
+  key: String,
+) -> Result(#(Lua, Value), LuaError(e))
+
+/// Sets `value` under `key` of the provided table.
+///
+/// This might trigger the `__newindex` metamethod.
+///
+/// ## Examples
+///
+/// ```gleam
+/// glua.run(glua.new(), {
+///   let fun = fn(_) {
+///     glua.error("this is a read-only table")
+///   }
+///
+///   use tbl <- glua.then(glua.table([]))
+///   use mt <- glua.then(glua.table([#(glua.string("__newindex"), glua.function(fun))]))
+///   use _ <- glua.then(glua.call_function(lib.set_metatable(), [tbl, mt]))
+///
+///   glua.new_index(tbl, "my_new_key", glua.string("my_new_value"))
+/// })
+/// // -> Error(glua.LuaRuntimeException(
+///   exception: glua.ErrorCall("this is a read-only table", option.None),
+///   state: _
+/// ))
+/// ```
+pub fn new_index(
+  table ref: Value,
+  key key: String,
+  value val: Value,
+) -> Action(Nil, e) {
+  Action(do_new_index(_, ref, key, val))
+}
+
+@external(erlang, "glua_ffi", "set_table_key")
+fn do_new_index(
+  state: Lua,
+  ref: Value,
+  key: String,
+  val: Value,
+) -> Result(#(Lua, Nil), LuaError(e))
