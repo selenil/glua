@@ -711,6 +711,23 @@ pub fn dereference(
 @external(erlang, "glua_ffi", "dereference")
 fn do_dereference(lua: Lua, ref: Value) -> dynamic.Dynamic
 
+/// Transforms an `Action` that returns a reference to a Lua value into an `Action` that returns
+/// a typed Gleam value.
+///
+/// ## Examples
+///
+/// ```gleam
+/// let decoder =
+///   decode.dict(decode.string, decode.int)
+///   |> decode.map(dict.to_list)
+///
+/// glua.eval(code: "return { a = 1, b = 2 }")
+/// |> glua.try(apply: list.first)
+/// |> glua.returning(using: decoder)
+/// |> glua.run(glua.new(), _)
+///
+/// // -> Ok([#("a", 1), #("b", 2)])
+/// ```
 pub fn returning(
   action act: Action(Value, e),
   using decoder: decode.Decoder(a),
