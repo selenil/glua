@@ -888,7 +888,7 @@ pub fn set(keys keys: List(String), value val: Value) -> Action(Nil, e) {
 /// ```gleam
 /// assert glua.new()
 ///        |> glua.set("secret_value", "private_value")
-///        |> glua.get("secret_value")
+///        |> glua.get("secret_value", decode.string)
 ///   == Ok("secret_value")
 /// ```
 pub fn set_private(state lua: Lua, key key: String, value value: a) -> Lua {
@@ -944,7 +944,7 @@ fn do_set_private(key: String, value: a, lua: Lua) -> Lua
 /// ## Examples
 ///
 /// ```gleam
-/// let lua = glua.set_private(glua.new(), "my_value", "will_be_removed"
+/// let lua = glua.set_private(glua.new(), "my_value", "will_be_removed")
 /// assert glua.get(lua, "my_value", decode.string) == Ok("will_be_removed")
 ///
 /// assert glua.delete_private(lua, "my_value")
