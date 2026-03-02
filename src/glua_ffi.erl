@@ -12,8 +12,8 @@
 %% that is more suitable for use in Gleam code
 to_gleam(Value) ->
     case Value of
-        {ok, Result, LuaState} ->
-            {ok, {LuaState, Result}};
+        {ok, Result, St0} ->
+            {ok, {St0, Result}};
         {ok, _} = Result ->
             Result;
         {lua_error, _, _} = Error ->
@@ -218,36 +218,36 @@ coerce_nil() ->
     nil.
 
 wrap_fun(Fun) ->
-    {erl_func, fun(Args, State) ->
+    {erl_func, fun(Args, St0) ->
             {action, F} = Fun(Args),
-            case F(State) of
-                {ok, {NewState, Ret}} -> {Ret, NewState};
+            case F(St0) of
+                {ok, {St1, Ret}} -> {Ret, St1};
                 {error, Err} ->
-                  {error, map_error(lua_error({glua_action_error, Err}, State))}
+                  {error, map_error(lua_error({glua_action_error, Err}, St0))}
             end
     end}.
 
 sandbox_fun(Msg) ->
-    {erl_func, fun(_, State) ->
-        {error, map_error(lua_error({error_call, [Msg]}, State))}
+    {erl_func, fun(_, St0) ->
+        {error, map_error(lua_error({error_call, [Msg]}, St0))}
     end}.
 
 decode_fun(Fun) ->
     case Fun of
         {luafun, F} -> {ok, F};
-        _ -> {error, fun(_) -> {action, fun(State) -> {ok, {State, nil}} end} end}
+        _ -> {error, fun(_) -> {action, fun(St0) -> {ok, {St0, nil}} end} end}
     end.
 
-get_table_key(Lua, Tref, Key) ->
-    try luerl_emul:get_table_key(Tref, Key, Lua) of
-        {nil, _St} -> {error, {key_not_found, [Key]}};
-        {Value, St} -> {ok, {St, Value}}
+get_table_key(St0, Tref, Key) ->
+    try luerl_emul:get_table_key(Tref, Key, St0) of
+        {nil, _St1} -> {error, {key_not_found, [Key]}};
+        {Value, St1} -> {ok, {St1, Value}}
     catch
         error:{lua_error, _, _} = Err -> {error, map_error(Err)}
     end.
 
-get_table_keys(Lua, Keys) ->
-    case luerl:get_table_keys(Keys, Lua) of
+get_table_keys(St0, Keys) ->
+    case luerl:get_table_keys(Keys, St0) of
         {ok, nil, _} ->
             {error, {key_not_found, Keys}};
         {ok, Value, _} ->
@@ -256,45 +256,45 @@ get_table_keys(Lua, Keys) ->
             to_gleam(Other)
     end.
 
-set_table_key(Lua, Tref, Key, Value) ->
+set_table_key(St0, Tref, Key, Value) ->
     try
-        St = luerl_emul:set_table_key(Tref, Key, Value, Lua),
-        {ok, {St, nil}}
+        St1 = luerl_emul:set_table_key(Tref, Key, Value, St0),
+        {ok, {St1, nil}}
     catch
         error:{lua_error, _, _} = Err -> {error, map_error(Err)}
     end.
 
-set_table_keys(Lua, Keys, Value) ->
-    to_gleam(luerl:set_table_keys(Keys, Value, Lua)).
+set_table_keys(St0, Keys, Value) ->
+    to_gleam(luerl:set_table_keys(Keys, Value, St0)).
 
-load(Lua, Code) ->
+load(St0, Code) ->
     to_gleam(luerl:load(
-                 unicode:characters_to_list(Code), Lua)).
+                 unicode:characters_to_list(Code), St0)).
 
-load_file(Lua, Path) ->
-    case luerl:loadfile(unicode:characters_to_list(Path), Lua) of
+load_file(St0, Path) ->
+    case luerl:loadfile(unicode:characters_to_list(Path), St0) of
       {error, [{none, file, enoent} | _], _} ->
         {error, {file_not_found, Path}};
       Other -> to_gleam(Other)
     end.
 
-eval(Lua, Code) ->
+eval(St0, Code) ->
     to_gleam(luerl:do(
-                 unicode:characters_to_list(Code), Lua)).
+                 unicode:characters_to_list(Code), St0)).
 
-eval_chunk(Lua, Chunk) ->
-    to_gleam(luerl:call_chunk(Chunk, Lua)).
+eval_chunk(St0, Chunk) ->
+    to_gleam(luerl:call_chunk(Chunk, St0)).
 
-eval_file(Lua, Path) ->
+eval_file(St0, Path) ->
     to_gleam(luerl:dofile(
-                 unicode:characters_to_list(Path), Lua)).
+                 unicode:characters_to_list(Path), St0)).
 
-call_function(Lua, Fun, Args) ->
-    to_gleam(luerl:call(Fun, Args, Lua)).
+call_function(St0, Fun, Args) ->
+    to_gleam(luerl:call(Fun, Args, St0)).
 
-get_private(Lua, Key) ->
+get_private(St0, Key) ->
     try
-        {ok, luerl:get_private(Key, Lua)}
+        {ok, luerl:get_private(Key, St0)}
     catch
         error:{badkey, _} ->
             {error, {key_not_found, [Key]}}
