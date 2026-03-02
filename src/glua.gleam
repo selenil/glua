@@ -341,19 +341,18 @@ pub fn then(action: Action(a, e), next: fn(a) -> Action(b, e)) -> Action(b, e) {
   next(ret).function(new)
 }
 
-/// Transforms the provided result into an `Action` by passing its value to a function
-/// that yields an `Action`.
-///
-/// If the input is an `Error`, then the function is not called and instead a failing `Action`
-/// is returned with the original error.
+/// Tries to update the return value of an `Action` by passing it to a function
+/// that yields a result.
 ///
 /// This is a shorthand for writing a case with `glua.then`:
 ///
 /// ```gleam
 /// use fun <- glua.then(glua.get(["string", "reverse"]))
-/// use return <- glua.then(glua.call_function(fun:, args: [glua.string("Hello")]))
-/// use value <- glua.try(list.first(return))
-/// glua.dereference(ref: value, using: decode.string)
+/// use return <- glua.then(
+///   glua.call_function(fun:, args: [glua.string("Hello")])
+///   |> glua.try(list.first)
+/// )
+/// glua.dereference(ref: return, using: decode.string)
 /// ```
 ///
 /// as opposed to this:
@@ -366,10 +365,14 @@ pub fn then(action: Action(a, e), next: fn(a) -> Action(b, e)) -> Action(b, e) {
 ///   _ -> glua.failure(Nil)
 /// }
 /// ```
-pub fn try(result: Result(a, e), next: fn(a) -> Action(b, e)) -> Action(b, e) {
-  case result {
-    Ok(ret) -> Action(next(ret).function)
-    Error(err) -> failure(err)
+pub fn try(
+  action action: Action(a, e),
+  apply fun: fn(a) -> Result(b, e),
+) -> Action(b, e) {
+  use ret <- then(action)
+  case fun(ret) {
+    Ok(x) -> success(x)
+    Error(e) -> failure(e)
   }
 }
 

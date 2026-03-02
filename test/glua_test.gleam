@@ -112,8 +112,7 @@ pub fn new_sandboxed_test() {
     use _ <- glua.then(glua.set_lua_paths(paths: ["./test/lua/?.lua"]))
 
     let code = "local s = require 'example'; return s"
-    use ref <- glua.then(glua.eval(code))
-    use ref <- glua.try(list.first(ref))
+    use ref <- glua.then(glua.eval(code) |> glua.try(list.first))
     use result <- glua.map(glua.dereference(ref:, using: decode.string))
 
     assert result == "LUA IS AN EMBEDDABLE LANGUAGE"
@@ -124,10 +123,10 @@ pub fn new_sandboxed_test() {
 
 pub fn guard_test() {
   let action = {
-    use ret <- glua.then(
-      glua.call_function_by_name(keys: ["math", "sqrt"], args: [glua.float(9.0)]),
+    use ref <- glua.then(
+      glua.call_function_by_name(keys: ["math", "sqrt"], args: [glua.float(9.0)])
+      |> glua.try(list.first),
     )
-    use ref <- glua.try(list.first(ret))
 
     use n <- glua.then(glua.dereference(ref:, using: decode.float))
     use <- glua.guard(when: n <. 0.0, return: Nil)
@@ -161,8 +160,10 @@ pub fn map_test() {
   assert glua.run(glua.new(), action) |> result.map(pair.second) == Ok(3)
 
   let action = {
-    use ret <- glua.then(glua.eval("return 3 * true"))
-    use ref <- glua.try(list.first(ret))
+    use ref <- glua.then(
+      glua.eval("return 3 * true")
+      |> glua.try(list.first),
+    )
 
     glua.map(glua.dereference(ref:, using: decode.int), fn(n) {
       "the result is " <> int.to_string(n)
@@ -224,8 +225,9 @@ pub fn userdata_test() {
     }
 
     use Nil <- glua.then(glua.set(["my_userdata"], userdata))
-    use ref <- glua.then(glua.eval("return my_userdata"))
-    use ref <- glua.try(list.first(ref))
+    use ref <- glua.then(
+      glua.eval("return my_userdata") |> glua.try(list.first),
+    )
     use result <- glua.then(glua.dereference(ref:, using: userdata_decoder))
 
     assert result == Userdata("my-userdata", 1)
@@ -345,10 +347,10 @@ pub fn set_test() {
       ),
     )
 
-    use refs <- glua.then(
-      glua.call_function_by_name(keys: ["count_odd"], args: [arg]),
+    use ref <- glua.then(
+      glua.call_function_by_name(keys: ["count_odd"], args: [arg])
+      |> glua.try(list.first),
     )
-    use ref <- glua.try(list.first(refs))
 
     use result <- glua.then(glua.dereference(ref:, using: decode.int))
 
@@ -379,18 +381,20 @@ pub fn set_test() {
 
     use Nil <- glua.then(glua.set(keys: ["my_functions"], value: tbl))
 
-    use refs <- glua.then(
+    use ref <- glua.then(
       glua.call_function_by_name(keys: ["my_functions", "is_even"], args: [
         glua.int(4),
-      ]),
+      ])
+      |> glua.try(list.first),
     )
-    use ref <- glua.try(list.first(refs))
     use result <- glua.then(glua.dereference(ref:, using: decode.bool))
 
     assert result == True
 
-    use refs <- glua.then(glua.eval("return my_functions.is_odd(4)"))
-    use ref <- glua.try(list.first(refs))
+    use ref <- glua.then(
+      glua.eval("return my_functions.is_odd(4)")
+      |> glua.try(list.first),
+    )
     use result <- glua.then(glua.dereference(ref:, using: decode.bool))
 
     assert result == False
@@ -405,8 +409,7 @@ pub fn set_lua_paths_test() {
 
     let code = "local s = require 'example'; return s"
 
-    use refs <- glua.then(glua.eval(code))
-    use ref <- glua.try(list.first(refs))
+    use ref <- glua.then(glua.eval(code) |> glua.try(list.first))
     use result <- glua.then(glua.dereference(ref:, using: decode.string))
 
     assert result == "LUA IS AN EMBEDDABLE LANGUAGE"
@@ -440,8 +443,10 @@ pub fn delete_private_test() {
 pub fn load_test() {
   let action = {
     use chunk <- glua.then(glua.load(code: "return 5 * 5"))
-    use refs <- glua.then(glua.eval_chunk(chunk))
-    use ref <- glua.try(list.first(refs))
+    use ref <- glua.then(
+      glua.eval_chunk(chunk)
+      |> glua.try(list.first),
+    )
     use result <- glua.then(glua.dereference(ref:, using: decode.int))
 
     assert result == 25
@@ -453,8 +458,10 @@ pub fn load_test() {
 pub fn eval_load_file_test() {
   let action = {
     use chunk <- glua.then(glua.load_file("./test/lua/example.lua"))
-    use refs <- glua.then(glua.eval_chunk(chunk))
-    use ref <- glua.try(list.first(refs))
+    use ref <- glua.then(
+      glua.eval_chunk(chunk)
+      |> glua.try(list.first),
+    )
     use result <- glua.then(glua.dereference(ref:, using: decode.string))
 
     assert result == "LUA IS AN EMBEDDABLE LANGUAGE"
@@ -468,8 +475,10 @@ pub fn eval_load_file_test() {
 
 pub fn eval_test() {
   let actions = {
-    use refs <- glua.then(glua.eval("return 'hello, ' .. 'world!'"))
-    use ref <- glua.try(list.first(refs))
+    use ref <- glua.then(
+      glua.eval("return 'hello, ' .. 'world!'")
+      |> glua.try(list.first),
+    )
     use result <- glua.then(glua.dereference(ref:, using: decode.string))
 
     assert result == "hello, world!"
@@ -500,8 +509,10 @@ pub fn eval_returns_proper_errors_test() {
     ])
 
   let action = {
-    use refs <- glua.then(glua.eval("return 'Hello from Lua!'"))
-    use ref <- glua.try(list.first(refs))
+    use ref <- glua.then(
+      glua.eval("return 'Hello from Lua!'")
+      |> glua.try(list.first),
+    )
     use _ <- glua.then(glua.dereference(ref:, using: decode.int))
     panic as "unreachable"
   }
@@ -570,8 +581,10 @@ pub fn eval_returns_proper_errors_test() {
 
 pub fn eval_file_test() {
   let action = {
-    use refs <- glua.then(glua.eval_file("./test/lua/example.lua"))
-    use ref <- glua.try(list.first(refs))
+    use ref <- glua.then(
+      glua.eval_file("./test/lua/example.lua")
+      |> glua.try(list.first),
+    )
     use result <- glua.then(glua.dereference(ref:, using: decode.string))
 
     assert result == "LUA IS AN EMBEDDABLE LANGUAGE"
@@ -582,24 +595,31 @@ pub fn eval_file_test() {
 
 pub fn call_function_test() {
   let action = {
-    use return <- glua.then(glua.eval("return string.reverse"))
-    use fun <- glua.try(list.first(return))
+    use fun <- glua.then(
+      glua.eval("return string.reverse") |> glua.try(list.first),
+    )
 
     let encoded = glua.string("auL")
 
-    use refs <- glua.then(glua.call_function(fun, [encoded]))
-    use ref <- glua.try(list.first(refs))
+    use ref <- glua.then(
+      glua.call_function(fun, [encoded])
+      |> glua.try(list.first),
+    )
     use result <- glua.then(glua.dereference(ref:, using: decode.string))
 
     assert result == "Lua"
 
-    use return <- glua.then(glua.eval("return function(a, b) return a .. b end"))
-    use fun <- glua.try(list.first(return))
+    use fun <- glua.then(
+      glua.eval("return function(a, b) return a .. b end")
+      |> glua.try(list.first),
+    )
 
     let args = list.map(["Lua in ", "Gleam"], glua.string)
 
-    use refs <- glua.then(glua.call_function(fun, args))
-    use ref <- glua.try(list.first(refs))
+    use ref <- glua.then(
+      glua.call_function(fun, args)
+      |> glua.try(list.first),
+    )
     use result <- glua.then(glua.dereference(ref:, using: decode.string))
 
     assert result == "Lua in Gleam"
@@ -610,12 +630,14 @@ pub fn call_function_test() {
 
 pub fn call_function_returns_proper_errors_test() {
   let action = {
-    use refs <- glua.then(glua.eval("return string.upper"))
-    use ref <- glua.try(list.first(refs))
-    use refs <- glua.then(
-      glua.call_function(ref, [glua.string("Hello from Gleam!")]),
+    use fun <- glua.then(
+      glua.eval("return string.upper")
+      |> glua.try(list.first),
     )
-    use ref <- glua.try(list.first(refs))
+    use ref <- glua.then(
+      glua.call_function(fun, [glua.string("Hello from Gleam!")])
+      |> glua.try(list.first),
+    )
     use _ <- glua.then(glua.dereference(ref:, using: decode.int))
     panic as "unreachable"
   }
@@ -626,8 +648,10 @@ pub fn call_function_returns_proper_errors_test() {
     )
 
   let action = {
-    use refs <- glua.then(glua.eval("return 1"))
-    use ref <- glua.try(list.first(refs))
+    use ref <- glua.then(
+      glua.eval("return 1")
+      |> glua.try(list.first),
+    )
     use _ <- glua.then(glua.call_function(ref, []))
     panic as "unreachable"
   }
@@ -676,29 +700,28 @@ pub fn call_function_returns_proper_errors_test() {
 pub fn call_function_by_name_test() {
   let action = {
     let args = list.map([20, 10], glua.int)
-    use refs <- glua.then(glua.call_function_by_name(
-      keys: ["math", "max"],
-      args:,
-    ))
-    use ref <- glua.try(list.first(refs))
+    use ref <- glua.then(
+      glua.call_function_by_name(keys: ["math", "max"], args:)
+      |> glua.try(list.first),
+    )
+
     use result <- glua.then(glua.dereference(ref:, using: decode.int))
 
     assert result == 20
 
-    use refs <- glua.then(glua.call_function_by_name(
-      keys: ["math", "min"],
-      args:,
-    ))
-    use ref <- glua.try(list.first(refs))
+    use ref <- glua.then(
+      glua.call_function_by_name(keys: ["math", "min"], args:)
+      |> glua.try(list.first),
+    )
     use result <- glua.then(glua.dereference(ref:, using: decode.int))
 
     assert result == 10
 
     let arg = glua.float(10.2)
-    use refs <- glua.then(
-      glua.call_function_by_name(keys: ["math", "type"], args: [arg]),
+    use ref <- glua.then(
+      glua.call_function_by_name(keys: ["math", "type"], args: [arg])
+      |> glua.try(list.first),
     )
-    use ref <- glua.try(list.first(refs))
     use result <- glua.then(glua.dereference(
       ref:,
       using: decode.optional(decode.string),
@@ -715,13 +738,13 @@ pub fn nested_function_references_test() {
   let action = {
     let code = "return function() return math.sqrt end"
 
-    use refs <- glua.then(glua.eval(code))
-    use ref <- glua.try(list.first(refs))
-    use refs <- glua.then(glua.call_function(ref, []))
-    use ref <- glua.try(list.first(refs))
+    use fun <- glua.then(glua.eval(code) |> glua.try(list.first))
+    use fun <- glua.then(glua.call_function(fun, []) |> glua.try(list.first))
 
-    use refs <- glua.then(glua.call_function(ref, [glua.int(400)]))
-    use ref <- glua.try(list.first(refs))
+    use ref <- glua.then(
+      glua.call_function(fun, [glua.int(400)])
+      |> glua.try(list.first),
+    )
     use result <- glua.then(glua.dereference(ref:, using: decode.float))
     assert result == 20.0
     glua.success(Nil)
@@ -753,8 +776,7 @@ pub fn format_error_test() {
     == "Lua source file \"non_existent_file\" not found"
 
   let action = {
-    use refs <- glua.then(glua.eval("return 1 + 1"))
-    use ref <- glua.try(list.first(refs))
+    use ref <- glua.then(glua.eval("return 1 + 1") |> glua.try(list.first))
     use _ <- glua.then(glua.dereference(ref:, using: decode.string))
     panic as "unreachable"
   }
@@ -774,8 +796,7 @@ pub fn decode_function_test() {
   let assert Ok(_) =
     glua.run(glua.new(), {
       use fun <- glua.then(lua_sqrt)
-      use ret <- glua.then(fun([glua.int(9)]))
-      use ref <- glua.try(list.first(ret))
+      use ref <- glua.then(fun([glua.int(9)]) |> glua.try(list.first))
       use result <- glua.map(glua.dereference(ref:, using: decode.float))
 
       assert result == 3.0
@@ -803,8 +824,7 @@ pub fn decode_function_test() {
 "
 
   let lua_fold = {
-    use ret <- glua.then(glua.eval(code:))
-    use ref <- glua.try(list.first(ret))
+    use ref <- glua.then(glua.eval(code:) |> glua.try(list.first))
     glua.dereference(ref:, using: glua.function_decoder())
   }
 
@@ -825,8 +845,9 @@ pub fn decode_function_test() {
         |> glua.function
 
       use fun <- glua.then(lua_fold)
-      use ret <- glua.then(fun([tbl, glua.int(1), callback]))
-      use ref <- glua.try(list.first(ret))
+      use ref <- glua.then(
+        fun([tbl, glua.int(1), callback]) |> glua.try(list.first),
+      )
       use result <- glua.map(glua.dereference(ref:, using: decode.int))
       assert result == 729
       Nil
@@ -882,8 +903,7 @@ pub fn decode_function_test() {
 
   let assert Error(glua.LuaRuntimeException(exn, _)) =
     glua.run(glua.new(), {
-      use ret <- glua.then(glua.eval(code:))
-      use ref <- glua.try(list.first(ret))
+      use ref <- glua.then(glua.eval(code:) |> glua.try(list.first))
       use fun <- glua.then(glua.dereference(
         ref:,
         using: glua.function_decoder(),
@@ -896,8 +916,7 @@ pub fn decode_function_test() {
   let code = "return function() return 3 * true end"
   let assert Error(glua.LuaRuntimeException(exn, _)) =
     glua.run(glua.new(), {
-      use ret <- glua.then(glua.eval(code:))
-      use ref <- glua.try(list.first(ret))
+      use ref <- glua.then(glua.eval(code:) |> glua.try(list.first))
       use fun <- glua.then(glua.dereference(
         ref:,
         using: glua.function_decoder(),
