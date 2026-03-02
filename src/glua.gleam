@@ -3,6 +3,7 @@
 //// Gleam wrapper around [Luerl](https://github.com/rvirding/luerl).
 
 import gleam/bool
+import gleam/dict
 import gleam/dynamic
 import gleam/dynamic/decode
 import gleam/int
@@ -523,6 +524,26 @@ pub fn table(values: List(#(Value, Value))) -> Action(Value, e) {
 
 @external(erlang, "luerl_heap", "alloc_table")
 fn do_table(values: List(#(Value, Value)), lua: Lua) -> #(Value, Lua)
+
+/// A decoder for list-style Lua tables.
+///
+/// ## Examples
+///
+/// ```gleam
+/// glua.run(glua.new(), {
+///   use ref <- glua.then(
+///     glua.eval("return { 1, 2, 3 }") |> glua.try(list.first)
+///   )
+///
+///   glua.dereference(ref:, using: glua.table_list_decoder(decode.int))
+/// })
+/// // -> Ok(#(_state, [1, 2, 3]))
+/// ```
+pub fn table_list_decoder(
+  inner decoder: decode.Decoder(a),
+) -> decode.Decoder(List(a)) {
+  decode.dict(decode.int, decoder) |> decode.map(dict.values)
+}
 
 /// Encodes a Gleam function into a Lua function.
 ///
