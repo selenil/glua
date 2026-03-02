@@ -16,7 +16,7 @@ import gleam/string
 pub type Lua
 
 /// Represents the errors than can happend during the parsing and execution of Lua code
-pub type LuaError(error) {
+pub type Error(error) {
   /// The compilation process of the Lua code failed because of the presence of one or more compile errors.
   LuaCompileFailure(errors: List(LuaCompileError))
   /// The Lua environment threw an exception during code execution.
@@ -64,7 +64,7 @@ pub type LuaRuntimeExceptionKind {
   UnknownException
 }
 
-/// Turns a `glua.LuaError` value into a human-readable string
+/// Turns a `glua.Error` value into a human-readable string
 ///
 /// ## Examples
 ///
@@ -117,7 +117,7 @@ pub type LuaRuntimeExceptionKind {
 /// glua.format_error(e)
 /// // -> "Expected String, but found Int"
 /// ```
-pub fn format_error(error: LuaError(e)) -> String {
+pub fn format_error(error: Error(e)) -> String {
   case error {
     LuaCompileFailure(errors) ->
       "Lua compile error: "
@@ -283,7 +283,7 @@ fn format_unknown_error(error: dynamic.Dynamic) -> String
 /// would return in case it succeeds, and `error` is the type of custom errors that
 /// the `Action` could return.
 pub opaque type Action(return, error) {
-  Action(function: fn(Lua) -> Result(#(Lua, return), LuaError(error)))
+  Action(function: fn(Lua) -> Result(#(Lua, return), Error(error)))
 }
 
 /// Runs an `Action` within a Lua environment.
@@ -302,7 +302,7 @@ pub opaque type Action(return, error) {
 pub fn run(
   state lua: Lua,
   action action: Action(return, error),
-) -> Result(#(Lua, return), LuaError(error)) {
+) -> Result(#(Lua, return), Error(error)) {
   action.function(lua)
 }
 
@@ -724,7 +724,7 @@ pub const default_sandbox = [
 /// In case you want to sandbox more Lua values, pass to `glua.sandbox` the returned Lua state.
 pub fn new_sandboxed(
   allow excluded: List(List(String)),
-) -> Result(Lua, LuaError(e)) {
+) -> Result(Lua, Error(e)) {
   list_substraction(default_sandbox, excluded)
   |> list.try_fold(from: new(), with: sandbox)
 }
@@ -746,10 +746,7 @@ fn list_substraction(a: List(a), b: List(a)) -> List(a)
 /// // 'important_file' was not deleted
 /// assert exception == glua.ErrorCall(["os.execute is sandboxed"])
 /// ```
-pub fn sandbox(
-  state lua: Lua,
-  keys keys: List(String),
-) -> Result(Lua, LuaError(e)) {
+pub fn sandbox(state lua: Lua, keys keys: List(String)) -> Result(Lua, Error(e)) {
   let msg = string.join(keys, with: ".") <> " is sandboxed"
 
   set(["_G", ..keys], sandbox_fun(msg)).function(lua)
@@ -795,7 +792,7 @@ pub fn get(keys keys: List(String)) -> Action(Value, e) {
 }
 
 @external(erlang, "glua_ffi", "get_table_keys")
-fn do_get(lua: Lua, keys: List(String)) -> Result(Value, LuaError(e))
+fn do_get(lua: Lua, keys: List(String)) -> Result(Value, Error(e))
 
 /// Gets a private value that is not exposed to the Lua runtime.
 ///
@@ -811,13 +808,13 @@ pub fn get_private(
   state lua: Lua,
   key key: String,
   using decoder: decode.Decoder(a),
-) -> Result(a, LuaError(e)) {
+) -> Result(a, Error(e)) {
   use value <- result.try(do_get_private(lua, key))
   decode.run(value, decoder) |> result.map_error(UnexpectedResultType)
 }
 
 @external(erlang, "glua_ffi", "get_private")
-fn do_get_private(lua: Lua, key: String) -> Result(dynamic.Dynamic, LuaError(e))
+fn do_get_private(lua: Lua, key: String) -> Result(dynamic.Dynamic, Error(e))
 
 /// Sets a value in the Lua environment.
 ///
@@ -934,7 +931,7 @@ pub fn set_lua_paths(paths paths: List(String)) -> Action(Nil, e) {
 }
 
 @external(erlang, "glua_ffi", "set_table_keys")
-fn do_set(lua: Lua, keys: List(String), val: a) -> Result(Lua, LuaError(e))
+fn do_set(lua: Lua, keys: List(String), val: a) -> Result(Lua, Error(e))
 
 @external(erlang, "luerl", "put_private")
 fn do_set_private(key: String, value: a, lua: Lua) -> Lua
@@ -966,7 +963,7 @@ pub fn load(code code: String) -> Action(Chunk, e) {
 }
 
 @external(erlang, "glua_ffi", "load")
-fn do_load(lua: Lua, code: String) -> Result(#(Lua, Chunk), LuaError(e))
+fn do_load(lua: Lua, code: String) -> Result(#(Lua, Chunk), Error(e))
 
 /// Parses a Lua source file and returns it as a compiled chunk.
 ///
@@ -976,7 +973,7 @@ pub fn load_file(path path: String) -> Action(Chunk, e) {
 }
 
 @external(erlang, "glua_ffi", "load_file")
-fn do_load_file(lua: Lua, path: String) -> Result(#(Lua, Chunk), LuaError(e))
+fn do_load_file(lua: Lua, path: String) -> Result(#(Lua, Chunk), Error(e))
 
 /// Evaluates a string of Lua code.
 ///
@@ -1019,7 +1016,7 @@ pub fn eval(code code: String) -> Action(List(Value), e) {
 }
 
 @external(erlang, "glua_ffi", "eval")
-fn do_eval(lua: Lua, code: String) -> Result(#(Lua, List(Value)), LuaError(e))
+fn do_eval(lua: Lua, code: String) -> Result(#(Lua, List(Value)), Error(e))
 
 /// Evaluates a compiled chunk of Lua code.
 ///
@@ -1045,7 +1042,7 @@ pub fn eval_chunk(chunk chunk: Chunk) -> Action(List(Value), e) {
 fn do_eval_chunk(
   lua: Lua,
   chunk: Chunk,
-) -> Result(#(Lua, List(Value)), LuaError(e))
+) -> Result(#(Lua, List(Value)), Error(e))
 
 /// Evaluates a Lua source file.
 ///
@@ -1074,10 +1071,7 @@ pub fn eval_file(path path: String) -> Action(List(Value), e) {
 }
 
 @external(erlang, "glua_ffi", "eval_file")
-fn do_eval_file(
-  lua: Lua,
-  path: String,
-) -> Result(#(Lua, List(Value)), LuaError(e))
+fn do_eval_file(lua: Lua, path: String) -> Result(#(Lua, List(Value)), Error(e))
 
 /// Calls a Lua function by reference.
 ///
@@ -1137,7 +1131,7 @@ fn do_call_function(
   lua: Lua,
   fun: Value,
   args: List(Value),
-) -> Result(#(Lua, List(Value)), LuaError(e))
+) -> Result(#(Lua, List(Value)), Error(e))
 
 /// Gets a reference to the function at `keys`, then inmediatly calls it with the provided `args`.
 ///
@@ -1194,7 +1188,7 @@ fn do_index(
   state: Lua,
   ref: Value,
   key: String,
-) -> Result(#(Lua, Value), LuaError(e))
+) -> Result(#(Lua, Value), Error(e))
 
 /// Sets `value` under `key` of the provided table.
 ///
@@ -1233,4 +1227,4 @@ fn do_new_index(
   ref: Value,
   key: String,
   val: Value,
-) -> Result(#(Lua, Nil), LuaError(e))
+) -> Result(#(Lua, Nil), Error(e))
