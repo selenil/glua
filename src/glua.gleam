@@ -524,19 +524,6 @@ pub fn table(values: List(#(Value, Value))) -> Action(Value, e) {
 @external(erlang, "luerl_heap", "alloc_table")
 fn do_table(values: List(#(Value, Value)), lua: Lua) -> #(Value, Lua)
 
-pub fn table_decoder(
-  keys_decoder: decode.Decoder(a),
-  values_decoder: decode.Decoder(b),
-) -> decode.Decoder(List(#(a, b))) {
-  let inner = {
-    use key <- decode.field(0, keys_decoder)
-    use val <- decode.field(1, values_decoder)
-    decode.success(#(key, val))
-  }
-
-  decode.list(of: inner)
-}
-
 /// Encodes a Gleam function into a Lua function.
 ///
 /// > **Note**: The function to be encoded has to return an `Action` with a `Never` type
@@ -572,10 +559,6 @@ fn decode_lua_function(
   fn(List(Value)) -> Action(List(Value), e),
   fn(List(Value)) -> Action(List(Value), e),
 )
-
-pub fn list(encoder: fn(a) -> Value, values: List(a)) -> List(Value) {
-  list.map(values, encoder)
-}
 
 /// Encodes any Gleam value as a reference that can be passed to a Lua program.
 ///
