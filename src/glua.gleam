@@ -294,13 +294,40 @@ pub opaque type Action(return, error) {
 /// ```gleam
 /// let state = glua.new()
 /// glua.run(state, {
-///   use ret <- glua.then(glua.eval("return 'Hello from Lua!'"))
-///   use ref <- glua.try(list.first(ret))
+///   use ret <- glua.then(
+///     glua.eval("return 'Hello from Lua!'")
+///     |> glua.try(list.first)
+///   )
+///
 ///   glua.dereference(ref:, using: decode.string)
 /// })
-/// // -> Ok(#(_state, "Hello from Lua!"))
+/// // -> Ok("Hello from Lua!")
 /// ```
 pub fn run(
+  state lua: Lua,
+  action action: Action(return, error),
+) -> Result(return, Error(error)) {
+  exec(lua, action) |> result.map(pair.second)
+}
+
+/// Runs an `Action` within a Lua environment and returns both the result
+/// and the updated Lua state in case of no errors.
+///
+/// ## Examples
+///
+/// ```gleam
+/// let state = glua.new()
+/// let assert Ok(#(new_state, Nil)) =
+///   glua.exec(state, glua.set(["my_value"], glua.string("Hello!")))
+///
+/// glua.exec(
+///   state:,
+///   action: glua.eval(code: "return my_value") |> glua.returning_list(decode.string)
+/// )
+///
+/// // -> Ok(#(_state, ["Hello!"]))
+/// ```
+pub fn exec(
   state lua: Lua,
   action action: Action(return, error),
 ) -> Result(#(Lua, return), Error(error)) {

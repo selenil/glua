@@ -12,7 +12,7 @@ import glua/lib/utf8
 
 /// Checks to see if a value matches a value at the given path.
 fn check(val: glua.Value, path: List(String)) {
-  let assert Ok(#(_, found)) = glua.run(glua.new(), glua.get(path))
+  let assert Ok(found) = glua.run(glua.new(), glua.get(path))
   assert val == found
 }
 

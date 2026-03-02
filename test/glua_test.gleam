@@ -5,7 +5,6 @@ import gleam/int
 import gleam/list
 import gleam/option
 import gleam/pair
-import gleam/result
 import gleeunit
 import glua
 import glua/lib
@@ -134,8 +133,7 @@ pub fn guard_test() {
     glua.success("the root square of 9.0 is " <> float.to_string(n))
   }
 
-  assert glua.run(glua.new(), action) |> result.map(pair.second)
-    == Ok("the root square of 9.0 is 3.0")
+  assert glua.run(glua.new(), action) == Ok("the root square of 9.0 is 3.0")
 
   let action = {
     use ret <- glua.then(glua.eval(code: "local a = 1"))
@@ -157,7 +155,7 @@ pub fn map_test() {
     |> glua.then(glua.dereference(_, using: decode.float))
     |> glua.map(float.truncate)
 
-  assert glua.run(glua.new(), action) |> result.map(pair.second) == Ok(3)
+  assert glua.run(glua.new(), action) == Ok(3)
 
   let action = {
     use ref <- glua.then(
@@ -236,7 +234,7 @@ pub fn userdata_test() {
     use Nil <- glua.then(glua.set(["my_other_userdata"], userdata))
     glua.success(Nil)
   }
-  let assert Ok(#(lua, Nil)) = glua.run(glua.new(), action)
+  let assert Ok(#(lua, Nil)) = glua.exec(glua.new(), action)
 
   let assert Error(glua.LuaRuntimeException(glua.IllegalIndex(index, _), _)) =
     glua.run(lua, glua.eval("return my_other_userdata.foo"))
@@ -929,7 +927,7 @@ pub fn decode_function_test() {
 
 pub fn index_test() {
   let assert Ok(#(state, tbl)) =
-    glua.run(glua.new(), {
+    glua.exec(glua.new(), {
       glua.table([#(glua.string("a_key"), glua.string("a value"))])
     })
 
@@ -937,7 +935,6 @@ pub fn index_test() {
       state,
       glua.index(tbl, "a_key") |> glua.returning(decode.string),
     )
-    |> result.map(pair.second)
     == Ok("a value")
 
   assert glua.run(state, {
@@ -949,7 +946,7 @@ pub fn index_test() {
     == Error(glua.KeyNotFound(["other_key"]))
 
   let assert Ok(#(state, tbl)) =
-    glua.run(glua.new(), {
+    glua.exec(glua.new(), {
       use tbl <- glua.then(glua.table([]))
       use mt <- glua.then(
         glua.table([
@@ -978,33 +975,29 @@ pub fn index_test() {
     })
 
   assert glua.run(state, glua.index(tbl, "1") |> glua.returning(decode.string))
-    |> result.map(pair.second)
     == Ok("integer")
 
   assert glua.run(state, glua.index(tbl, "a") |> glua.returning(decode.string))
-    |> result.map(pair.second)
     == Ok("other")
 
   assert glua.run(state, glua.index(tbl, "2") |> glua.returning(decode.int))
-    |> result.map(pair.second)
     == Error(
       glua.UnexpectedResultType([decode.DecodeError("Int", "String", [])]),
     )
 }
 
 pub fn new_index_test() {
-  let assert Ok(#(state, tbl)) = glua.run(glua.new(), { glua.table([]) })
+  let assert Ok(#(state, tbl)) = glua.exec(glua.new(), { glua.table([]) })
 
   assert glua.run(state, {
       use _ <- glua.then(glua.new_index(tbl, "a_key", glua.int(1)))
       use ref <- glua.then(glua.index(tbl, "a_key"))
       glua.dereference(ref, decode.int)
     })
-    |> result.map(pair.second)
     == Ok(1)
 
   let assert Ok(#(state, tbl)) =
-    glua.run(glua.new(), {
+    glua.exec(glua.new(), {
       use tbl <- glua.then(glua.table([]))
       use mt <- glua.then(
         glua.table([
@@ -1033,7 +1026,6 @@ pub fn new_index_test() {
       use ref <- glua.then(glua.index(tbl, "a_key"))
       glua.dereference(ref, decode.int)
     })
-    |> result.map(pair.second)
     == Ok(36)
 
   assert glua.run(state, {
@@ -1041,11 +1033,10 @@ pub fn new_index_test() {
       use ref <- glua.then(glua.index(tbl, "other_key"))
       glua.dereference(ref, decode.int)
     })
-    |> result.map(pair.second)
     == Ok(49)
 
   let assert Ok(#(state, tbl)) =
-    glua.run(glua.new(), {
+    glua.exec(glua.new(), {
       use tbl <- glua.then(glua.table([]))
       use mt <- glua.then(
         glua.table([
