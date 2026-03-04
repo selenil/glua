@@ -42,6 +42,25 @@ pub fn get_table_test() {
   let assert Ok(_) = glua.run(glua.new(), action)
 }
 
+pub fn table_list_test() {
+  let list = ["foo", "bar", "baz", "qux"]
+  glua.run(glua.new(), {
+    use val <- glua.then(glua.table_list(list |> list.map(glua.string)))
+    use decoded <- glua.then(glua.dereference(
+      val,
+      glua.table_list_decoder(decode.string),
+    ))
+    assert list == decoded
+    use decoded <- glua.then(glua.dereference(
+      val,
+      decode.dict(decode.int, decode.string),
+    ))
+    assert dict.to_list(decoded)
+      == [#(1, "foo"), #(2, "bar"), #(3, "baz"), #(4, "qux")]
+    glua.success(Nil)
+  })
+}
+
 pub fn sandbox_test() {
   let assert Ok(lua) = glua.sandbox(glua.new(), ["math", "max"])
   let args = list.map([20, 10], glua.int)
