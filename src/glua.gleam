@@ -581,7 +581,14 @@ fn do_table(values: List(#(Value, Value)), lua: Lua) -> #(Value, Lua)
 pub fn table_list_decoder(
   inner decoder: decode.Decoder(a),
 ) -> decode.Decoder(List(a)) {
-  decode.dict(decode.int, decoder) |> decode.map(dict.values)
+  decode.dict(decode.int, decoder) |> decode.map(list_loop(_, [], 1))
+}
+
+fn list_loop(dict: dict.Dict(Int, a), acc: List(a), idx: Int) {
+  case dict.get(dict, idx) {
+    Ok(it) -> list_loop(dict, [it, ..acc], idx + 1)
+    Error(Nil) -> list.reverse(acc)
+  }
 }
 
 /// Encodes a Gleam function into a Lua function.
