@@ -1231,7 +1231,7 @@ pub fn call_function_by_name(
 /// })
 /// // -> Ok("fixed value")
 /// ```
-pub fn index(table ref: Value, key key: String) -> Action(Value, e) {
+pub fn index(table ref: Value, key key: Value) -> Action(Value, e) {
   Action(do_index(_, ref, key))
 }
 
@@ -1239,7 +1239,7 @@ pub fn index(table ref: Value, key key: String) -> Action(Value, e) {
 fn do_index(
   state: Lua,
   ref: Value,
-  key: String,
+  key: Value,
 ) -> Result(#(Lua, Value), Error(e))
 
 /// Sets `value` under `key` of the provided table.
@@ -1267,7 +1267,7 @@ fn do_index(
 /// ```
 pub fn new_index(
   table ref: Value,
-  key key: String,
+  key key: Value,
   value val: Value,
 ) -> Action(Nil, e) {
   Action(do_new_index(_, ref, key, val))
@@ -1277,6 +1277,6 @@ pub fn new_index(
 fn do_new_index(
   state: Lua,
   ref: Value,
-  key: String,
+  key: Value,
   val: Value,
 ) -> Result(#(Lua, Nil), Error(e))
