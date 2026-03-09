@@ -372,7 +372,7 @@ pub fn then(action: Action(a, e), next: fn(a) -> Action(b, e)) -> Action(b, e) {
 /// use fun <- glua.then(glua.get(["string", "reverse"]))
 /// glua.call_function(fun:, args: [glua.string("Hello")])
 /// |> glua.try(list.first)
-/// |> glua.returning(decode.string)  
+/// |> glua.returning(decode.string)
 /// ```
 ///
 /// as opposed to this:
