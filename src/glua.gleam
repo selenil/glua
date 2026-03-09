@@ -294,7 +294,7 @@ pub opaque type Action(return, error) {
 /// let state = glua.new()
 ///
 /// glua.eval(code: "return 'Hello from Lua!'")
-/// |> glua.returning_list(using: decode.string)
+/// |> glua.returning_multi(using: decode.string)
 /// |> glua.run(state, _)
 /// // -> Ok("Hello from Lua!")
 /// ```
@@ -317,7 +317,7 @@ pub fn run(
 ///
 /// glua.exec(
 ///   state:,
-///   action: glua.eval(code: "return my_value") |> glua.returning_list(decode.string)
+///   action: glua.eval(code: "return my_value") |> glua.returning_multi(decode.string)
 /// )
 ///
 /// // -> Ok(#(_state, ["Hello!"]))
@@ -729,7 +729,9 @@ pub fn returning(
   dereference(ref, decoder)
 }
 
-pub fn returning_list(
+/// Same as `glua.returning`, but works on an `Action` that returns multiple references to Lua values
+/// instead of a single one.
+pub fn returning_multi(
   action act: Action(List(Value), e),
   using decoder: decode.Decoder(a),
 ) -> Action(List(a), e) {
@@ -1022,7 +1024,7 @@ fn do_load_file(lua: Lua, path: String) -> Result(#(Lua, Chunk), Error(e))
 ///
 /// ```gleam
 /// glua.eval(code: "return 1 + 2")
-/// |> glua.returning_list(using: decode.int)
+/// |> glua.returning_multi(using: decode.int)
 /// |> glua.run(glua.new(), _)
 /// // -> Ok([3])
 /// ```
@@ -1063,7 +1065,7 @@ fn do_eval(lua: Lua, code: String) -> Result(#(Lua, List(Value)), Error(e))
 /// ```gleam
 /// glua.load(code: "return 'hello, world!'")
 /// |> glua.then(glua.eval_chunk)
-/// |> glua.returning_list(using: decode.string)
+/// |> glua.returning_multi(using: decode.string)
 /// |> glua.run(glua.new(), _)
 /// // -> Ok(["hello, world!"])
 /// ```
@@ -1085,7 +1087,7 @@ fn do_eval_chunk(
 /// glua.eval_file(
 ///   path: "path/to/hello.lua",
 /// )
-/// |> glua.returning_list(using: decode.string)
+/// |> glua.returning_multi(using: decode.string)
 /// |> glua.run(glua.new(), _)
 /// // -> Ok(["hello, world!"])
 /// ```
@@ -1117,7 +1119,7 @@ fn do_eval_file(lua: Lua, path: String) -> Result(#(Lua, List(Value)), Error(e))
 ///     ref: fun,
 ///     args: [glua.int(81)],
 ///   )
-///   |> glua.returning_list(using: decode.float)
+///   |> glua.returning_multi(using: decode.float)
 /// })
 /// // -> Ok([9.0])
 /// ```
@@ -1141,7 +1143,7 @@ fn do_eval_file(lua: Lua, path: String) -> Result(#(Lua, List(Value)), Error(e))
 ///     ref: fun,
 ///     args: [glua.int(10)],
 ///   )
-///   |> glua.returning_list(using: decode.int)
+///   |> glua.returning_multi(using: decode.int)
 /// })
 /// // -> Ok([55])
 /// ```
@@ -1170,7 +1172,7 @@ fn do_call_function(
 ///   keys: ["string", "upper"],
 ///   args: [glua.string("hello from Gleam!")]
 /// ))
-/// |> glua.returning_list(using: decode.string) 
+/// |> glua.returning_multi(using: decode.string)
 /// |> glua.run(glua.new(), _)
 /// // -> Ok("HELLO FROM GLEAM!")
 /// ```
