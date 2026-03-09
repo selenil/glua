@@ -481,9 +481,8 @@ pub fn eval_test() {
 
     assert result == "hello, world!"
 
-    use refs <- glua.then(glua.eval("return 2 + 2, 3 - 1"))
     use return <- glua.then(
-      glua.fold(refs, glua.dereference(ref: _, using: decode.int)),
+      glua.eval("return 2 + 2, 3 - 1") |> glua.returning_multi(decode.int),
     )
     assert return == [4, 2]
     glua.success(Nil)
@@ -874,17 +873,17 @@ pub fn decode_function_test() {
         |> glua.table,
       )
 
-      use ret <- glua.then(fun([tbl, glua.int(4), glua.int(8)]))
       use result <- glua.then(
-        glua.fold(ret, glua.dereference(_, using: decode.string)),
+        fun([tbl, glua.int(4), glua.int(8)])
+        |> glua.returning_multi(decode.string),
       )
 
       assert result == ["d", "e", "f", "g", "h"]
 
-      use ret <- glua.then(fun([tbl, glua.int(8)]))
       use result <- glua.then(
-        glua.fold(ret, glua.dereference(_, using: decode.string)),
+        fun([tbl, glua.int(8)]) |> glua.returning_multi(decode.string),
       )
+
       assert result == ["h", "i", "j"]
       glua.success(Nil)
     })
