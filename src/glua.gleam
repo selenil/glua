@@ -549,13 +549,10 @@ fn do_table(values: List(#(Value, Value)), lua: Lua) -> #(Value, Lua)
 /// ## Examples
 ///
 /// ```gleam
-/// glua.run(glua.new(), {
-///   use ref <- glua.then(
-///     glua.eval("return { 1, 2, 3 }") |> glua.try(list.first)
-///   )
-///
-///   glua.dereference(ref:, using: glua.table_list_decoder(decode.int))
-/// })
+/// glua.eval("return { 1, 2, 3 }")
+/// |> glua.try(list.first)
+/// |> glua.returning(glua.table_list_decoder(decode.int))
+/// |> glua.run(glua.new(), _)
 /// // -> Ok([1, 2, 3])
 /// ```
 pub fn table_list_decoder(
