@@ -3,6 +3,7 @@
 //// Gleam wrapper around [Luerl](https://github.com/rvirding/luerl).
 
 import gleam/bool
+import gleam/dict
 import gleam/dynamic
 import gleam/dynamic/decode
 import gleam/int
@@ -16,7 +17,7 @@ import gleam/string
 pub type Lua
 
 /// Represents the errors than can happend during the parsing and execution of Lua code
-pub type LuaError(error) {
+pub type Error(error) {
   /// The compilation process of the Lua code failed because of the presence of one or more compile errors.
   LuaCompileFailure(errors: List(LuaCompileError))
   /// The Lua environment threw an exception during code execution.
@@ -64,7 +65,7 @@ pub type LuaRuntimeExceptionKind {
   UnknownException
 }
 
-/// Turns a `glua.LuaError` value into a human-readable string
+/// Turns a `glua.Error` value into a human-readable string
 ///
 /// ## Examples
 ///
@@ -117,7 +118,7 @@ pub type LuaRuntimeExceptionKind {
 /// glua.format_error(e)
 /// // -> "Expected String, but found Int"
 /// ```
-pub fn format_error(error: LuaError(e)) -> String {
+pub fn format_error(error: Error(e)) -> String {
   case error {
     LuaCompileFailure(errors) ->
       "Lua compile error: "
@@ -241,17 +242,16 @@ fn format_unknown_error(error: dynamic.Dynamic) -> String
 /// let state = glua.new()
 /// let result = {
 ///   use #(new_state, _) <- result.try(
-///     glua.run(state, glua.set(keys: ["a_number"], value: glua.int(36)))
+///     glua.exec(state, glua.set(keys: ["a_number"], value: glua.int(36)))
 ///   )
 ///   use #(new_state, ret) <- result.try(
-///     glua.run(state, glua.eval("return math.sqrt(a_number)"))
+///     glua.exec(state, glua.eval("return math.sqrt(a_number)"))
 ///   )
 ///
 ///   // we know that `math.sqrt` only returns one value
 ///   let assert [ref] = ret
 ///
 ///   glua.run(new_state, glua.dereference(ref:, using: decode.float))
-///   |> result.map(pair.second)
 /// }
 /// result
 /// // -> Ok(6.0)
@@ -275,7 +275,7 @@ fn format_unknown_error(error: dynamic.Dynamic) -> String
 ///   glua.dereference(ref:, using: decode.float)
 /// }
 ///
-/// glua.run(state, action) |> result.map(pair.second)
+/// glua.run(state, action)
 /// // -> Ok(6.0)
 /// ```
 ///
@@ -283,7 +283,7 @@ fn format_unknown_error(error: dynamic.Dynamic) -> String
 /// would return in case it succeeds, and `error` is the type of custom errors that
 /// the `Action` could return.
 pub opaque type Action(return, error) {
-  Action(function: fn(Lua) -> Result(#(Lua, return), LuaError(error)))
+  Action(function: fn(Lua) -> Result(#(Lua, return), Error(error)))
 }
 
 /// Runs an `Action` within a Lua environment.
@@ -292,17 +292,40 @@ pub opaque type Action(return, error) {
 ///
 /// ```gleam
 /// let state = glua.new()
-/// glua.run(state, {
-///   use ret <- glua.then(glua.eval("return 'Hello from Lua!'"))
-///   use ref <- glua.try(list.first(ret))
-///   glua.dereference(ref:, using: decode.string)
-/// })
-/// // -> Ok(#(_state, "Hello from Lua!"))
+///
+/// glua.eval(code: "return 'Hello from Lua!'")
+/// |> glua.returning_multi(using: decode.string)
+/// |> glua.run(state, _)
+/// // -> Ok("Hello from Lua!")
 /// ```
 pub fn run(
   state lua: Lua,
   action action: Action(return, error),
-) -> Result(#(Lua, return), LuaError(error)) {
+) -> Result(return, Error(error)) {
+  exec(lua, action) |> result.map(pair.second)
+}
+
+/// Runs an `Action` within a Lua environment and returns both the result
+/// and the updated Lua state in case of no errors.
+///
+/// ## Examples
+///
+/// ```gleam
+/// let state = glua.new()
+/// let assert Ok(#(new_state, Nil)) =
+///   glua.exec(state, glua.set(["my_value"], glua.string("Hello!")))
+///
+/// glua.exec(
+///   state:,
+///   action: glua.eval(code: "return my_value") |> glua.returning_multi(decode.string)
+/// )
+///
+/// // -> Ok(#(_state, ["Hello!"]))
+/// ```
+pub fn exec(
+  state lua: Lua,
+  action action: Action(return, error),
+) -> Result(#(Lua, return), Error(error)) {
   action.function(lua)
 }
 
@@ -320,8 +343,7 @@ pub fn run(
 /// let my_value = 1
 /// let assert Ok(#(_state, ret)) = glua.run(glua.new(), {
 ///   use _ <- glua.then(glua.set(keys: ["my_value"], value: glua.int(my_value)))
-///   use ref <- glua.then(glua.get(keys: ["my_value"]))
-///   glua.dereference(ref:, using: decode.int)
+///   glua.get(keys: ["my_value"]) |> glua.returning(decode.int)
 /// })
 ///
 /// assert ret == my_value
@@ -341,19 +363,16 @@ pub fn then(action: Action(a, e), next: fn(a) -> Action(b, e)) -> Action(b, e) {
   next(ret).function(new)
 }
 
-/// Transforms the provided result into an `Action` by passing its value to a function
-/// that yields an `Action`.
-///
-/// If the input is an `Error`, then the function is not called and instead a failing `Action`
-/// is returned with the original error.
+/// Tries to update the return value of an `Action` by passing it to a function
+/// that yields a result.
 ///
 /// This is a shorthand for writing a case with `glua.then`:
 ///
 /// ```gleam
 /// use fun <- glua.then(glua.get(["string", "reverse"]))
-/// use return <- glua.then(glua.call_function(fun:, args: [glua.string("Hello")]))
-/// use value <- glua.try(list.first(return))
-/// glua.dereference(ref: value, using: decode.string)
+/// glua.call_function(fun:, args: [glua.string("Hello")])
+/// |> glua.try(list.first)
+/// |> glua.returning(decode.string)
 /// ```
 ///
 /// as opposed to this:
@@ -366,10 +385,14 @@ pub fn then(action: Action(a, e), next: fn(a) -> Action(b, e)) -> Action(b, e) {
 ///   _ -> glua.failure(Nil)
 /// }
 /// ```
-pub fn try(result: Result(a, e), next: fn(a) -> Action(b, e)) -> Action(b, e) {
-  case result {
-    Ok(ret) -> Action(next(ret).function)
-    Error(err) -> failure(err)
+pub fn try(
+  action action: Action(a, e),
+  apply fun: fn(a) -> Result(b, e),
+) -> Action(b, e) {
+  use ret <- then(action)
+  case fun(ret) {
+    Ok(x) -> success(x)
+    Error(e) -> failure(e)
   }
 }
 
@@ -383,7 +406,7 @@ pub fn try(result: Result(a, e), next: fn(a) -> Action(b, e)) -> Action(b, e) {
 ///   use ret <- glua.then(glua.eval(code: "local a = 1"))
 ///   use <- glua.guard(when: ret == [], return: "expected at least one value from Lua")
 ///
-///  glua.fold(ret, glua.dereference(_, using: decode.int))
+///   glua.fold(ret, glua.dereference(_, using: decode.int))
 /// })
 /// // -> Error(glua.CustomError("expected at least one value from Lua"))
 /// ```
@@ -401,7 +424,7 @@ pub fn guard(
 ///
 /// ```gleam
 /// glua.run(glua.new(), glua.success("my value"))
-/// // -> Ok(#(_state, "my_value"))
+/// // -> Ok("my_value")
 /// ```
 pub fn success(value: a) -> Action(a, e) {
   use state <- Action
@@ -442,12 +465,13 @@ pub fn error_with_level(message: String, level: Int) -> Action(List(Value), e) {
 /// ## Examples
 ///
 /// ```gleam
-/// glua.run(glua.new(), {
-///   use ref <- glua.then(glua.get(keys: ["_VERSION"]))
-///   use version <- glua.map(glua.dereference(ref:, using: decode.string))
+/// glua.get(keys: ["_VERSION"])
+/// |> glua.returning(using: decode.string)
+/// |> glua.map(fn(version) {
 ///   "glua supports " <> version
 /// })
-/// // -> Ok(#(_state, "glua supports Lua 5.3"))
+/// |> glua.run(glua.new(), _)
+/// // -> Ok("glua supports Lua 5.3")
 /// ```
 ///
 /// ```gleam
@@ -472,12 +496,11 @@ pub fn map(over action: Action(a, e), with fun: fn(a) -> b) -> Action(b, e) {
 /// let numbers = [9, 16, 25]
 /// let keys = ["math", "sqrt"]
 /// glua.run(glua.new(), glua.fold(numbers, fn(n) {
-///   use ret <- glua.then(glua.call_function_by_name(keys:, args: [glua.int(n)]))
-///
-///   let assert [ref] = ret
-///   glua.dereference(ref:, using: decode.float)
+///   glua.call_function_by_name(keys:, args: [glua.int(n)])
+///   |> glua.try(list.first)
+///   |> glua.returning(using: decode.float)
 /// }))
-/// // -> Ok(#(_state, [3.0, 4.0, 5.0]))
+/// // -> Ok([3.0, 4.0, 5.0])
 /// ```
 pub fn fold(
   over list: List(a),
@@ -521,17 +544,21 @@ pub fn table(values: List(#(Value, Value))) -> Action(Value, e) {
 @external(erlang, "luerl_heap", "alloc_table")
 fn do_table(values: List(#(Value, Value)), lua: Lua) -> #(Value, Lua)
 
-pub fn table_decoder(
-  keys_decoder: decode.Decoder(a),
-  values_decoder: decode.Decoder(b),
-) -> decode.Decoder(List(#(a, b))) {
-  let inner = {
-    use key <- decode.field(0, keys_decoder)
-    use val <- decode.field(1, values_decoder)
-    decode.success(#(key, val))
-  }
-
-  decode.list(of: inner)
+/// A decoder for list-style Lua tables.
+///
+/// ## Examples
+///
+/// ```gleam
+/// glua.eval("return { 1, 2, 3 }")
+/// |> glua.try(list.first)
+/// |> glua.returning(glua.table_list_decoder(decode.int))
+/// |> glua.run(glua.new(), _)
+/// // -> Ok([1, 2, 3])
+/// ```
+pub fn table_list_decoder(
+  inner decoder: decode.Decoder(a),
+) -> decode.Decoder(List(a)) {
+  decode.dict(decode.int, decoder) |> decode.map(dict.values)
 }
 
 /// Encodes a Gleam function into a Lua function.
@@ -570,10 +597,6 @@ fn decode_lua_function(
   fn(List(Value)) -> Action(List(Value), e),
 )
 
-pub fn list(encoder: fn(a) -> Value, values: List(a)) -> List(Value) {
-  list.map(values, encoder)
-}
-
 /// Encodes any Gleam value as a reference that can be passed to a Lua program.
 ///
 /// Deferencing a userdata value inside Lua code will cause a Lua exception.
@@ -598,12 +621,11 @@ pub fn list(encoder: fn(a) -> Value, values: List(a)) -> List(Value) {
 ///     value: userdata
 ///   ))
 ///   
-///   use ret <- glua.then(glua.eval(code: "return a_user"))
-///   use ref <- glua.try(list.first(ret))
-///
-///   glua.dereference(ref:, using: user_decoder)
+///   glua.eval(code: "return a_user")
+///   |> glua.try(list.first)
+///   |> glua.returning(using: user_decoder)
 /// })
-/// // -> Ok(#(_state, User("Jhon Doe", False)))
+/// // -> Ok(User("Jhon Doe", False))
 /// ```
 ///
 /// ```gleam
@@ -640,24 +662,26 @@ fn do_function(fun: fn(List(Value)) -> Action(List(Value), e)) -> Value
 /// ## Examples
 ///
 /// ```gleam
-/// glua.run(glua.new(), { 
-///   use ret <- glua.then(glua.eval(code: "return 'Hello from Lua!'"))
-///   use ref <- glua.try(list.first(ret))
+/// glua.run(glua.new(), {
+///   use ref <- glua.then(
+///     glua.eval(code: "return 'Hello from Lua!'")
+///     |> glua.try(list.first)
+///   )
 ///
 ///   glua.dereference(ref:, using: decode.string)
-/// }
-/// // -> Ok(#(_state, "Hello from Lua!"))
+/// })
+/// // -> Ok("Hello from Lua!")
 /// ```
 ///
 /// ```gleam
-/// let assert Ok(#(state, [ref1, ref2])) = glua.run(
+/// let assert Ok(#(state, [ref1, ref2])) = glua.exec(
 ///   glua.new(),
 ///   glua.eval(code: "return 1, true")
 /// )
 ///
-/// let assert Ok(#(_state, 1)) =
+/// let assert Ok(1) =
 ///   glua.run(state, glua.dereference(ref: ref1, using: decode.int))
-/// let assert Ok(#(_state, True)) =
+/// let assert Ok(True) =
 ///   glua.run(state, glua.dereference(ref: ref2, using: decode.bool))
 /// ```
 pub fn dereference(
@@ -677,6 +701,23 @@ pub fn dereference(
 @external(erlang, "glua_ffi", "dereference")
 fn do_dereference(lua: Lua, ref: Value) -> dynamic.Dynamic
 
+/// Transforms an `Action` that returns a reference to a Lua value into an `Action` that returns
+/// a typed Gleam value.
+///
+/// ## Examples
+///
+/// ```gleam
+/// let decoder =
+///   decode.dict(decode.string, decode.int)
+///   |> decode.map(dict.to_list)
+///
+/// glua.eval(code: "return { a = 1, b = 2 }")
+/// |> glua.try(apply: list.first)
+/// |> glua.returning(using: decoder)
+/// |> glua.run(glua.new(), _)
+///
+/// // -> Ok([#("a", 1), #("b", 2)])
+/// ```
 pub fn returning(
   action act: Action(Value, e),
   using decoder: decode.Decoder(a),
@@ -685,7 +726,9 @@ pub fn returning(
   dereference(ref, decoder)
 }
 
-pub fn returning_list(
+/// Same as `glua.returning`, but works on an `Action` that returns multiple references to Lua values
+/// instead of a single one.
+pub fn returning_multi(
   action act: Action(List(Value), e),
   using decoder: decode.Decoder(a),
 ) -> Action(List(a), e) {
@@ -724,7 +767,7 @@ pub const default_sandbox = [
 /// In case you want to sandbox more Lua values, pass to `glua.sandbox` the returned Lua state.
 pub fn new_sandboxed(
   allow excluded: List(List(String)),
-) -> Result(Lua, LuaError(e)) {
+) -> Result(Lua, Error(e)) {
   list_substraction(default_sandbox, excluded)
   |> list.try_fold(from: new(), with: sandbox)
 }
@@ -746,10 +789,7 @@ fn list_substraction(a: List(a), b: List(a)) -> List(a)
 /// // 'important_file' was not deleted
 /// assert exception == glua.ErrorCall(["os.execute is sandboxed"])
 /// ```
-pub fn sandbox(
-  state lua: Lua,
-  keys keys: List(String),
-) -> Result(Lua, LuaError(e)) {
+pub fn sandbox(state lua: Lua, keys keys: List(String)) -> Result(Lua, Error(e)) {
   let msg = string.join(keys, with: ".") <> " is sandboxed"
 
   set(["_G", ..keys], sandbox_fun(msg)).function(lua)
@@ -764,11 +804,10 @@ fn sandbox_fun(msg: String) -> Value
 /// ## Examples
 ///
 /// ```gleam
-/// glua.run(glua.new(), {
-///   use ref <- glua.then(glua.get(keys: ["_VERSION"]))
-///   glua.dereference(ref:, using: decode.string)
-/// })
-/// // -> Ok(#(_state, "Lua 5.3"))
+/// glua.get(keys: ["_VERSION"])
+/// |> glua.returning(using: decode.string)
+/// |> glua.run(glua.new(), _)
+/// // -> Ok("Lua 5.3")
 /// ```
 ///
 /// ```gleam
@@ -777,11 +816,11 @@ fn sandbox_fun(msg: String) -> Value
 ///     keys: ["my_table", "my_value"],
 ///     value: glua.bool(True)
 ///   ))
-///   use ref <- glua.then(glua.get(keys: ["my_table", "my_value"]))
 ///
-///   glua.dereference(ref:, using: decode.bool)
+///   glua.get(keys: ["my_table", "my_value"]))
+///   |> glua.returning(using: decode.bool)
 /// })
-/// // -> Ok(#(_state, True))
+/// // -> Ok(True)
 /// ```
 ///
 /// ```gleam
@@ -795,7 +834,7 @@ pub fn get(keys keys: List(String)) -> Action(Value, e) {
 }
 
 @external(erlang, "glua_ffi", "get_table_keys")
-fn do_get(lua: Lua, keys: List(String)) -> Result(Value, LuaError(e))
+fn do_get(lua: Lua, keys: List(String)) -> Result(Value, Error(e))
 
 /// Gets a private value that is not exposed to the Lua runtime.
 ///
@@ -811,13 +850,13 @@ pub fn get_private(
   state lua: Lua,
   key key: String,
   using decoder: decode.Decoder(a),
-) -> Result(a, LuaError(e)) {
+) -> Result(a, Error(e)) {
   use value <- result.try(do_get_private(lua, key))
   decode.run(value, decoder) |> result.map_error(UnexpectedResultType)
 }
 
 @external(erlang, "glua_ffi", "get_private")
-fn do_get_private(lua: Lua, key: String) -> Result(dynamic.Dynamic, LuaError(e))
+fn do_get_private(lua: Lua, key: String) -> Result(dynamic.Dynamic, Error(e))
 
 /// Sets a value in the Lua environment.
 ///
@@ -834,26 +873,24 @@ fn do_get_private(lua: Lua, key: String) -> Result(dynamic.Dynamic, LuaError(e))
 ///     keys: ["my_number"],
 ///     value: glua.int(10)
 ///   ))
-///   use ref <- glua.get(keys: ["my_number"])
 ///
-///   glua.dereference(ref:, using: decode.int)
+///   glua.get(keys: ["my_number"])
+///   |> glua.returning(using: decode.int)
 /// })
-/// // -> Ok(#(_state, 10))
+/// // -> Ok(10)
 /// ```
 ///
 /// ```gleam
 /// let emails = ["jhondoe@example.com", "lucy@example.com"]
-/// let assert Ok(#(_state, results)) = glua.run(glua.new(), {
+/// let assert Ok(results) = glua.run(glua.new(), {
 ///   use encoded <- glua.then(glua.table(
 ///     list.index_map(emails, fn(email, i) { #(glua.int(i + 1), glua.string(email)) })
 ///   ))
 ///   use _ <- glua.then(glua.set(["info", "emails"], encoded))
 ///
-///   use ret <- glua.then(glua.eval(code: "return info.emails"))
-///   use ref <- glua.try(list.first(ret))
-///
-///   glua.dereference(ref:, using: decode.dict(decode.int, decode.string))
-///   |> glua.map(dict.values)
+///   glua.eval(code: "return info.emails"))
+///   |> glua.try(list.first)
+///   |> glua.returning(using: glua.table_list_decoder(decode.string))
 /// })
 ///
 /// assert results == emails
@@ -888,7 +925,7 @@ pub fn set(keys keys: List(String), value val: Value) -> Action(Nil, e) {
 /// ```gleam
 /// assert glua.new()
 ///        |> glua.set("secret_value", "private_value")
-///        |> glua.get("secret_value")
+///        |> glua.get("secret_value", decode.string)
 ///   == Ok("secret_value")
 /// ```
 pub fn set_private(state lua: Lua, key key: String, value value: a) -> Lua {
@@ -919,14 +956,14 @@ pub fn set_api(
 /// let my_scripts_paths = ["app/scripts/lua/?.lua"]
 /// glua.run(glua.new(), {
 ///   use _ <- glua.then(glua.set_lua_paths(paths: my_scripts_paths))
-///   use ret <- glua.then(glua.eval(
-///     code: "local my_math = require 'my_script'; return my_math.square(3)"
-///   ))
-///   use ref <- glua.try(list.first(ret))
 ///
-///   glua.dereference(ref:, using: decode.int)
+///   glua.eval(
+///     code: "local my_math = require 'my_script'; return my_math.square(3)"
+///   )
+///   |> glua.try(list.first)
+///   |> glua.returning(decode.int)
 /// })
-/// // -> Ok(#(_state, 9))
+/// // -> Ok(9)
 /// ```
 pub fn set_lua_paths(paths paths: List(String)) -> Action(Nil, e) {
   let paths = string.join(paths, with: ";") |> string
@@ -934,7 +971,7 @@ pub fn set_lua_paths(paths paths: List(String)) -> Action(Nil, e) {
 }
 
 @external(erlang, "glua_ffi", "set_table_keys")
-fn do_set(lua: Lua, keys: List(String), val: a) -> Result(Lua, LuaError(e))
+fn do_set(lua: Lua, keys: List(String), val: a) -> Result(Lua, Error(e))
 
 @external(erlang, "luerl", "put_private")
 fn do_set_private(key: String, value: a, lua: Lua) -> Lua
@@ -944,7 +981,7 @@ fn do_set_private(key: String, value: a, lua: Lua) -> Lua
 /// ## Examples
 ///
 /// ```gleam
-/// let lua = glua.set_private(glua.new(), "my_value", "will_be_removed"
+/// let lua = glua.set_private(glua.new(), "my_value", "will_be_removed")
 /// assert glua.get(lua, "my_value", decode.string) == Ok("will_be_removed")
 ///
 /// assert glua.delete_private(lua, "my_value")
@@ -966,7 +1003,7 @@ pub fn load(code code: String) -> Action(Chunk, e) {
 }
 
 @external(erlang, "glua_ffi", "load")
-fn do_load(lua: Lua, code: String) -> Result(#(Lua, Chunk), LuaError(e))
+fn do_load(lua: Lua, code: String) -> Result(#(Lua, Chunk), Error(e))
 
 /// Parses a Lua source file and returns it as a compiled chunk.
 ///
@@ -976,30 +1013,27 @@ pub fn load_file(path path: String) -> Action(Chunk, e) {
 }
 
 @external(erlang, "glua_ffi", "load_file")
-fn do_load_file(lua: Lua, path: String) -> Result(#(Lua, Chunk), LuaError(e))
+fn do_load_file(lua: Lua, path: String) -> Result(#(Lua, Chunk), Error(e))
 
 /// Evaluates a string of Lua code.
 ///
 /// ## Examples
 ///
 /// ```gleam
-/// glua.run(glua.new(), {
-///   use ret <- glua.then(glua.eval(code: "return 1 + 2"))
-///   use ref <- glua.try(list.first(ret))
-///   
-///   glua.dereference(ref:, using: decode.int)
-/// })
-/// // -> Ok(#(_state, 3))
+/// glua.eval(code: "return 1 + 2")
+/// |> glua.returning_multi(using: decode.int)
+/// |> glua.run(glua.new(), _)
+/// // -> Ok([3])
 /// ```
 ///
 /// ```gleam
-/// let assert Ok(#(state, [ref1, ref2])) = glua.run(glua.new(), glua.eval(
+/// let assert Ok(#(state, [ref1, ref2])) = glua.exec(glua.new(), glua.eval(
 ///   code: "return 'hello, world!', 10",
 /// ))
 ///
-/// let assert Ok(#(_state, "hello world")) =
+/// let assert Ok("hello world") =
 ///   glua.run(state, glua.dereference(ref: ref1, using: decode.string))
-/// let assert Ok(#(_state, 10)) =
+/// let assert Ok(10) =
 ///   glua.run(state, glua.dereference(ref: ref2, using: decode.int))
 /// ```
 ///
@@ -1019,23 +1053,18 @@ pub fn eval(code code: String) -> Action(List(Value), e) {
 }
 
 @external(erlang, "glua_ffi", "eval")
-fn do_eval(lua: Lua, code: String) -> Result(#(Lua, List(Value)), LuaError(e))
+fn do_eval(lua: Lua, code: String) -> Result(#(Lua, List(Value)), Error(e))
 
 /// Evaluates a compiled chunk of Lua code.
 ///
 /// ## Examples
 /// 
 /// ```gleam
-/// glua.run(glua.new(), {
-///   use chunk <- glua.then(glua.load(
-///     code: "return 'hello, world!'"
-///   ))
-/// 
-///   use ret <- glua.then(glua.eval_chunk(chunk:))
-///   use ref <- glua.try(list.first(ret))
-///
-///   glua.dereference(ref:, using: decode.string)
-/// // -> Ok(#(_state, "hello, world!"))
+/// glua.load(code: "return 'hello, world!'")
+/// |> glua.then(glua.eval_chunk)
+/// |> glua.returning_multi(using: decode.string)
+/// |> glua.run(glua.new(), _)
+/// // -> Ok(["hello, world!"])
 /// ```
 pub fn eval_chunk(chunk chunk: Chunk) -> Action(List(Value), e) {
   Action(do_eval_chunk(_, chunk))
@@ -1045,22 +1074,19 @@ pub fn eval_chunk(chunk chunk: Chunk) -> Action(List(Value), e) {
 fn do_eval_chunk(
   lua: Lua,
   chunk: Chunk,
-) -> Result(#(Lua, List(Value)), LuaError(e))
+) -> Result(#(Lua, List(Value)), Error(e))
 
 /// Evaluates a Lua source file.
 ///
 /// ## Examples
 /// 
 /// ```gleam
-/// glua.run(glua.new(), {
-///   use ret <- glua.then(glua.eval_file(
-///     path: "path/to/hello.lua",
-///   ))
-///   use ref <- glua.try(list.first(ret))
-///
-///   glua.dereference(ref:, using: decode.string)
-/// })
-/// // -> Ok(#(_state, "hello, world!"))
+/// glua.eval_file(
+///   path: "path/to/hello.lua",
+/// )
+/// |> glua.returning_multi(using: decode.string)
+/// |> glua.run(glua.new(), _)
+/// // -> Ok(["hello, world!"])
 /// ```
 ///
 /// ```gleam
@@ -1074,10 +1100,7 @@ pub fn eval_file(path path: String) -> Action(List(Value), e) {
 }
 
 @external(erlang, "glua_ffi", "eval_file")
-fn do_eval_file(
-  lua: Lua,
-  path: String,
-) -> Result(#(Lua, List(Value)), LuaError(e))
+fn do_eval_file(lua: Lua, path: String) -> Result(#(Lua, List(Value)), Error(e))
 
 /// Calls a Lua function by reference.
 ///
@@ -1085,18 +1108,17 @@ fn do_eval_file(
 ///
 /// ```gleam
 /// glua.run(glua.new(), {
-///   use ret <- glua.then(glua.eval(code: "return math.sqrt"))
-///   use fun <- glua.try(list.first(ret))
+///   use fun <- glua.then(
+///     glua.eval(code: "return math.sqrt") |> glua.try(list.first)
+///   )
 ///
-///   use ret <- glua.then(glua.call_function(
+///   glua.call_function(
 ///     ref: fun,
 ///     args: [glua.int(81)],
-///   ))
-///   use ref <- glua.try(list.first(ret))
-///
-///   glua.dereference(ref:, using: decode.float)
+///   )
+///   |> glua.returning_multi(using: decode.float)
 /// })
-/// // -> Ok(#(_state, 9.0))
+/// // -> Ok([9.0])
 /// ```
 ///
 /// ```gleam
@@ -1112,18 +1134,15 @@ fn do_eval_file(
 /// "
 ///
 /// glua.run(glua.new(), {
-///   use ret <- glua.then(glua.eval(code:))
-///   use ref <- glua.try(list.first(ret))
+///   use fun <- glua.then(glua.eval(code:) |> glua.try(list.first))
 ///
-///   use ret <- glua.then(glua.call_function(
+///   glua.call_function(
 ///     ref: fun,
 ///     args: [glua.int(10)],
-///   ))
-///   use ref <- glua.try(list.first(ret))
-///
-///   glua.dereference(ref:, using: decode.int)
+///   )
+///   |> glua.returning_multi(using: decode.int)
 /// })
-/// // -> Ok(#(_state, 55))
+/// // -> Ok([55])
 /// ```
 pub fn call_function(
   ref fun: Value,
@@ -1137,7 +1156,7 @@ fn do_call_function(
   lua: Lua,
   fun: Value,
   args: List(Value),
-) -> Result(#(Lua, List(Value)), LuaError(e))
+) -> Result(#(Lua, List(Value)), Error(e))
 
 /// Gets a reference to the function at `keys`, then inmediatly calls it with the provided `args`.
 ///
@@ -1146,16 +1165,13 @@ fn do_call_function(
 /// ## Examples
 ///
 /// ```gleam
-/// glua.run(glua.new(), {
-///   use ret <- glua.then(glua.call_function_by_name(
-///     keys: ["string", "upper"],
-///     args: [glua.string("hello from Gleam!")]
-///   ))
-///   use ref <- glua.try(list.first(ret))
-///
-///   glua.dereference(ref:, using: decode.string)
-/// })
-/// // -> Ok(#(_state, "HELLO FROM GLEAM!"))
+/// glua.call_function_by_name(
+///   keys: ["string", "upper"],
+///   args: [glua.string("hello from Gleam!")]
+/// ))
+/// |> glua.returning_multi(using: decode.string)
+/// |> glua.run(glua.new(), _)
+/// // -> Ok("HELLO FROM GLEAM!")
 /// ```
 pub fn call_function_by_name(
   keys keys: List(String),
@@ -1181,9 +1197,9 @@ pub fn call_function_by_name(
 ///   use mt <- glua.then(glua.table([#(glua.string("__index"), glua.function(fun))]))
 ///   use _ <- glua.then(glua.call_function(lib.set_metatable(), [tbl, mt]))
 ///
-///   glua.index(tbl, "a_key")
+///   glua.index(tbl, "a_key") |> glua.returning(decode.string)
 /// })
-/// // -> Ok(#(_state, ["fixed value"]))
+/// // -> Ok("fixed value")
 /// ```
 pub fn index(table ref: Value, key key: String) -> Action(Value, e) {
   Action(do_index(_, ref, key))
@@ -1194,7 +1210,7 @@ fn do_index(
   state: Lua,
   ref: Value,
   key: String,
-) -> Result(#(Lua, Value), LuaError(e))
+) -> Result(#(Lua, Value), Error(e))
 
 /// Sets `value` under `key` of the provided table.
 ///
@@ -1233,4 +1249,4 @@ fn do_new_index(
   ref: Value,
   key: String,
   val: Value,
-) -> Result(#(Lua, Nil), LuaError(e))
+) -> Result(#(Lua, Nil), Error(e))

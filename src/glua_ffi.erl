@@ -3,17 +3,33 @@
 -import(ttdict, [fold/3]).
 -include_lib("luerl/include/luerl.hrl").
 
--export([get_stacktrace/1, dereference/2, coerce/1, coerce_nil/0, wrap_fun/1, decode_fun/1, sandbox_fun/1, get_table_key/3,
-         get_table_keys/2, get_private/2, set_table_key/4, set_table_keys/3, load/2, load_file/2, eval/2, eval_file/2,
-         eval_chunk/2, call_function/3]).
-
+-export([
+    get_stacktrace/1,
+    dereference/2,
+    coerce/1,
+    coerce_nil/0,
+    wrap_fun/1,
+    decode_fun/1,
+    sandbox_fun/1,
+    get_table_key/3,
+    get_table_keys/2,
+    get_private/2,
+    set_table_key/4,
+    set_table_keys/3,
+    load/2,
+    load_file/2,
+    eval/2,
+    eval_file/2,
+    eval_chunk/2,
+    call_function/3
+]).
 
 %% helper to convert luerl return values to a format
 %% that is more suitable for use in Gleam code
 to_gleam(Value) ->
     case Value of
-        {ok, Result, LuaState} ->
-            {ok, {LuaState, Result}};
+        {ok, Result, St0} ->
+            {ok, {St0, Result}};
         {ok, _} = Result ->
             Result;
         {lua_error, _, _} = Error ->
@@ -29,25 +45,32 @@ to_gleam(Value) ->
 dereference(St, LT) ->
     dereference(LT, St, []).
 
-dereference(nil, _, _) -> nil;
-dereference(false, _, _) -> false;
-dereference(true, _, _) -> true;
+dereference(nil, _, _) ->
+    nil;
+dereference(false, _, _) ->
+    false;
+dereference(true, _, _) ->
+    true;
 dereference(B, _, _) when is_binary(B) -> B;
-dereference(N, _, _) when is_number(N) -> N;         %Integers and floats
-dereference(#tref{}=T, St, In) ->
+%Integers and floats
+dereference(N, _, _) when is_number(N) -> N;
+dereference(#tref{} = T, St, In) ->
     dereference_table(T, St, In);
-dereference(#usdref{}=U, St, _In) ->
-    {#userdata{d=Data},_} = luerl_heap:get_userdata(U, St),
+dereference(#usdref{} = U, St, _In) ->
+    {#userdata{d = Data}, _} = luerl_heap:get_userdata(U, St),
     Data;
-dereference(#funref{}=Fun, _St, _In) ->
+dereference(#funref{} = Fun, _St, _In) ->
     dereference_fun(fun(Args, State) -> luerl_emul:functioncall(Fun, Args, State) end);
-dereference(#erl_func{code=Fun}, _St, _In) ->
-    Fun;                                       %Just the bare fun
-dereference(#erl_mfa{m=M, f=F}, _St, _In) ->
+dereference(#erl_func{code = Fun}, _St, _In) ->
+    %Just the bare fun
+    Fun;
+dereference(#erl_mfa{m = M, f = F}, _St, _In) ->
     dereference_fun(fun(Args, State) -> M:F(nil, Args, State) end);
-dereference(Lua, _, _) -> error({badarg,Lua}).       %Shouldn't have anything else
+%Shouldn't have anything else
+dereference(Lua, _, _) ->
+    error({badarg, Lua}).
 
-dereference_table(#tref{i=N}=T, St, In0) ->
+dereference_table(#tref{i = N} = T, St, In0) ->
     case lists:member(N, In0) of
         true ->
             % Been here before
@@ -59,8 +82,8 @@ dereference_table(#tref{i=N}=T, St, In0) ->
                 #table{a = Arr, d = Dict} ->
                     Fun = fun(K, V, Acc) ->
                         Acc#{
-                            dereference(K, St, In1)
-                            => dereference(V, St, In1)
+                            dereference(K, St, In1) =>
+                                dereference(V, St, In1)
                         }
                     end,
                     M0 = ttdict:fold(Fun, #{}, Dict),
@@ -86,69 +109,73 @@ map_error({error, Errors, _}) ->
     {lua_compile_failure, lists:map(fun map_compile_error/1, Errors)};
 map_error({lua_error, {illegal_index, Value, Index}, State}) ->
     FormattedIndex = unicode:characters_to_binary(Index),
-    FormattedValue = unicode:characters_to_binary(io_lib:format("~p",[luerl:decode(Value, State)])),
-    {lua_runtime_exception, {illegal_index, FormattedIndex, FormattedValue}, State}; 
+    FormattedValue = unicode:characters_to_binary(
+        io_lib:format("~p", [luerl:decode(Value, State)])
+    ),
+    {lua_runtime_exception, {illegal_index, FormattedIndex, FormattedValue}, State};
 map_error({lua_error, {error_call, Args}, State}) ->
     case Args of
         [Msg, Level] when is_binary(Msg) andalso is_integer(Level) ->
             {lua_runtime_exception, {error_call, Msg, {some, Level}}, State};
         [Msg] when is_binary(Msg) ->
             {lua_runtime_exception, {error_call, Msg, none}, State};
-
         % error() was called with incorrect arguments
         _ ->
             {unknown_error, {error_call, Args}}
     end;
 map_error({lua_error, {undefined_function, Value}, State}) ->
     {lua_runtime_exception,
-     {undefined_function, unicode:characters_to_binary(io_lib:format("~p",[Value]))}, State};
+        {undefined_function, unicode:characters_to_binary(io_lib:format("~p", [Value]))}, State};
 map_error({lua_error, {undefined_method, Obj, Value}, State}) ->
     {lua_runtime_exception,
-     {undefined_method, unicode:characters_to_binary(io_lib:format("~p", [Obj])), Value}, State};
+        {undefined_method, unicode:characters_to_binary(io_lib:format("~p", [Obj])), Value}, State};
 map_error({lua_error, {badarith, Operator, Args}, State}) ->
     FormattedOperator = unicode:characters_to_binary(atom_to_list(Operator)),
     FormattedArgs =
-        lists:map(fun(V) ->
-                     unicode:characters_to_binary(
-                         io_lib:format("~p", [V]))
-                  end,
-                  Args),
+        lists:map(
+            fun(V) ->
+                unicode:characters_to_binary(
+                    io_lib:format("~p", [V])
+                )
+            end,
+            Args
+        ),
     {lua_runtime_exception, {bad_arith, FormattedOperator, FormattedArgs}, State};
 map_error({lua_error, {assert_error, Msg} = Error, State}) ->
     case Msg of
         M when is_binary(M) ->
             {lua_runtime_exception, Error, State};
-
         % assert() was called with incorrect arguments
         _ ->
             {unknown_error, Error}
     end;
 map_error({lua_error, {badarg, F, Args}, State}) ->
-  {lua_runtime_exception, {badarg, atom_to_binary(F), Args}, State};
+    {lua_runtime_exception, {badarg, atom_to_binary(F), Args}, State};
 map_error({lua_error, {glua_action_error, Err}, _}) ->
-   Err;
+    Err;
 map_error({lua_error, _, State}) ->
     {lua_runtime_exception, unknown_exception, State};
 map_error(Error) ->
-   {unknown_error, Error}.
+    {unknown_error, Error}.
 
 map_compile_error({Line, Type, {user, Messages}}) ->
     map_compile_error({Line, Type, Messages});
 map_compile_error({Line, Type, {illegal, Token}}) ->
-    map_compile_error({Line, Type, io_lib:format("~p ~p",["Illegal token",Token])});
+    map_compile_error({Line, Type, io_lib:format("~p ~p", ["Illegal token", Token])});
 map_compile_error({Line, Type, Messages}) ->
-    Kind = case Type of
-        luerl_parse -> parse;
-        luerl_scan -> tokenize
-    end,
+    Kind =
+        case Type of
+            luerl_parse -> parse;
+            luerl_scan -> tokenize
+        end,
     {lua_compile_error, Line, Kind, unicode:characters_to_binary(Messages)}.
-
 
 get_stacktrace(State) ->
     case luerl:get_stacktrace(State) of
         [] ->
             <<"">>;
-        Stacktrace -> format_stacktrace(State, Stacktrace)
+        Stacktrace ->
+            format_stacktrace(State, Stacktrace)
     end.
 
 %% turns a Lua stacktrace into a string suitable for pretty-printing
@@ -209,7 +236,7 @@ format_stacktrace(State, [_ | Rest] = Stacktrace) ->
 
 %% borrowed from: https://github.com/tv-labs/lua
 format_args(Args) ->
-  ["(", lists:join(", ", lists:map(fun luerl_lib:format_value/1, Args)), ")"].
+    ["(", lists:join(", ", lists:map(fun luerl_lib:format_value/1, Args)), ")"].
 
 coerce(X) ->
     X.
@@ -218,36 +245,35 @@ coerce_nil() ->
     nil.
 
 wrap_fun(Fun) ->
-    {erl_func, fun(Args, State) ->
-            {action, F} = Fun(Args),
-            case F(State) of
-                {ok, {NewState, Ret}} -> {Ret, NewState};
-                {error, Err} ->
-                  {error, map_error(lua_error({glua_action_error, Err}, State))}
-            end
+    {erl_func, fun(Args, St0) ->
+        {action, F} = Fun(Args),
+        case F(St0) of
+            {ok, {St1, Ret}} -> {Ret, St1};
+            {error, Err} -> {error, map_error(lua_error({glua_action_error, Err}, St0))}
+        end
     end}.
 
 sandbox_fun(Msg) ->
-    {erl_func, fun(_, State) ->
-        {error, map_error(lua_error({error_call, [Msg]}, State))}
+    {erl_func, fun(_, St0) ->
+        {error, map_error(lua_error({error_call, [Msg]}, St0))}
     end}.
 
 decode_fun(Fun) ->
     case Fun of
         {luafun, F} -> {ok, F};
-        _ -> {error, fun(_) -> {action, fun(State) -> {ok, {State, nil}} end} end}
+        _ -> {error, fun(_) -> {action, fun(St0) -> {ok, {St0, nil}} end} end}
     end.
 
-get_table_key(Lua, Tref, Key) ->
-    try luerl_emul:get_table_key(Tref, Key, Lua) of
-        {nil, _St} -> {error, {key_not_found, [Key]}};
-        {Value, St} -> {ok, {St, Value}}
+get_table_key(St0, Tref, Key) ->
+    try luerl_emul:get_table_key(Tref, Key, St0) of
+        {nil, _St1} -> {error, {key_not_found, [Key]}};
+        {Value, St1} -> {ok, {St1, Value}}
     catch
         error:{lua_error, _, _} = Err -> {error, map_error(Err)}
     end.
 
-get_table_keys(Lua, Keys) ->
-    case luerl:get_table_keys(Keys, Lua) of
+get_table_keys(St0, Keys) ->
+    case luerl:get_table_keys(Keys, St0) of
         {ok, nil, _} ->
             {error, {key_not_found, Keys}};
         {ok, Value, _} ->
@@ -256,45 +282,55 @@ get_table_keys(Lua, Keys) ->
             to_gleam(Other)
     end.
 
-set_table_key(Lua, Tref, Key, Value) ->
+set_table_key(St0, Tref, Key, Value) ->
     try
-        St = luerl_emul:set_table_key(Tref, Key, Value, Lua),
-        {ok, {St, nil}}
+        St1 = luerl_emul:set_table_key(Tref, Key, Value, St0),
+        {ok, {St1, nil}}
     catch
         error:{lua_error, _, _} = Err -> {error, map_error(Err)}
     end.
 
-set_table_keys(Lua, Keys, Value) ->
-    to_gleam(luerl:set_table_keys(Keys, Value, Lua)).
+set_table_keys(St0, Keys, Value) ->
+    to_gleam(luerl:set_table_keys(Keys, Value, St0)).
 
-load(Lua, Code) ->
-    to_gleam(luerl:load(
-                 unicode:characters_to_list(Code), Lua)).
+load(St0, Code) ->
+    to_gleam(
+        luerl:load(
+            unicode:characters_to_list(Code), St0
+        )
+    ).
 
-load_file(Lua, Path) ->
-    case luerl:loadfile(unicode:characters_to_list(Path), Lua) of
-      {error, [{none, file, enoent} | _], _} ->
-        {error, {file_not_found, Path}};
-      Other -> to_gleam(Other)
+load_file(St0, Path) ->
+    case luerl:loadfile(unicode:characters_to_list(Path), St0) of
+        {error, [{none, file, enoent} | _], _} ->
+            {error, {file_not_found, Path}};
+        Other ->
+            to_gleam(Other)
     end.
 
-eval(Lua, Code) ->
-    to_gleam(luerl:do(
-                 unicode:characters_to_list(Code), Lua)).
+eval(St0, Code) ->
+    to_gleam(
+        luerl:do(
+            unicode:characters_to_list(Code), St0
+        )
+    ).
 
-eval_chunk(Lua, Chunk) ->
-    to_gleam(luerl:call_chunk(Chunk, Lua)).
+eval_chunk(St0, Chunk) ->
+    to_gleam(luerl:call_chunk(Chunk, St0)).
 
-eval_file(Lua, Path) ->
-    to_gleam(luerl:dofile(
-                 unicode:characters_to_list(Path), Lua)).
+eval_file(St0, Path) ->
+    to_gleam(
+        luerl:dofile(
+            unicode:characters_to_list(Path), St0
+        )
+    ).
 
-call_function(Lua, Fun, Args) ->
-    to_gleam(luerl:call(Fun, Args, Lua)).
+call_function(St0, Fun, Args) ->
+    to_gleam(luerl:call(Fun, Args, St0)).
 
-get_private(Lua, Key) ->
+get_private(St0, Key) ->
     try
-        {ok, luerl:get_private(Key, Lua)}
+        {ok, luerl:get_private(Key, St0)}
     catch
         error:{badkey, _} ->
             {error, {key_not_found, [Key]}}
