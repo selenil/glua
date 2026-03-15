@@ -925,20 +925,28 @@ pub fn decode_function_test() {
 pub fn index_test() {
   let assert Ok(#(state, tbl)) =
     glua.exec(glua.new(), {
-      glua.table([#(glua.string("a_key"), glua.string("a value"))])
+      glua.table([
+        #(glua.string("a_key"), glua.string("a value")),
+        #(glua.int(4), glua.string("another value")),
+      ])
     })
 
   assert glua.run(
       state,
-      glua.index(tbl, "a_key") |> glua.returning(decode.string),
+      glua.index(tbl, glua.string("a_key")) |> glua.returning(decode.string),
     )
     == Ok("a value")
+  assert glua.run(
+      state,
+      glua.index(tbl, glua.int(4)) |> glua.returning(decode.string),
+    )
+    == Ok("another value")
 
   assert glua.run(state, {
       use tbl <- glua.then(
         glua.table([#(glua.string("a_key"), glua.string("a value"))]),
       )
-      glua.index(tbl, "other_key")
+      glua.index(tbl, glua.string("other_key"))
     })
     == Error(glua.KeyNotFound(["other_key"]))
 
@@ -971,13 +979,22 @@ pub fn index_test() {
       glua.success(tbl)
     })
 
-  assert glua.run(state, glua.index(tbl, "1") |> glua.returning(decode.string))
+  assert glua.run(
+      state,
+      glua.index(tbl, glua.string("1")) |> glua.returning(decode.string),
+    )
     == Ok("integer")
 
-  assert glua.run(state, glua.index(tbl, "a") |> glua.returning(decode.string))
+  assert glua.run(
+      state,
+      glua.index(tbl, glua.string("a")) |> glua.returning(decode.string),
+    )
     == Ok("other")
 
-  assert glua.run(state, glua.index(tbl, "2") |> glua.returning(decode.int))
+  assert glua.run(
+      state,
+      glua.index(tbl, glua.string("2")) |> glua.returning(decode.int),
+    )
     == Error(
       glua.UnexpectedResultType([decode.DecodeError("Int", "String", [])]),
     )
@@ -987,8 +1004,8 @@ pub fn new_index_test() {
   let assert Ok(#(state, tbl)) = glua.exec(glua.new(), { glua.table([]) })
 
   assert glua.run(state, {
-      use _ <- glua.then(glua.new_index(tbl, "a_key", glua.int(1)))
-      glua.index(tbl, "a_key") |> glua.returning(decode.int)
+      use _ <- glua.then(glua.new_index(tbl, glua.string("a_key"), glua.int(1)))
+      glua.index(tbl, glua.string("a_key")) |> glua.returning(decode.int)
     })
     == Ok(1)
 
@@ -1018,14 +1035,18 @@ pub fn new_index_test() {
     })
 
   assert glua.run(state, {
-      use _ <- glua.then(glua.new_index(tbl, "a_key", glua.int(6)))
-      glua.index(tbl, "a_key") |> glua.returning(decode.int)
+      use _ <- glua.then(glua.new_index(tbl, glua.string("a_key"), glua.int(6)))
+      glua.index(tbl, glua.string("a_key")) |> glua.returning(decode.int)
     })
     == Ok(36)
 
   assert glua.run(state, {
-      use _ <- glua.then(glua.new_index(tbl, "other_key", glua.int(7)))
-      glua.index(tbl, "other_key") |> glua.returning(decode.int)
+      use _ <- glua.then(glua.new_index(
+        tbl,
+        glua.string("other_key"),
+        glua.int(7),
+      ))
+      glua.index(tbl, glua.string("other_key")) |> glua.returning(decode.int)
     })
     == Ok(49)
 
@@ -1050,5 +1071,9 @@ pub fn new_index_test() {
   let assert Error(glua.LuaRuntimeException(
     exception: glua.ErrorCall(message: "read-only table", level: _),
     state: _,
-  )) = glua.run(state, glua.new_index(tbl, "my_key", glua.string("my value")))
+  )) =
+    glua.run(
+      state,
+      glua.new_index(tbl, glua.string("my_key"), glua.string("my value")),
+    )
 }
