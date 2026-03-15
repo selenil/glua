@@ -447,14 +447,30 @@ pub fn failure(error: e) -> Action(a, e) {
   Error(CustomError(error))
 }
 
+/// Returns the `error` function.
+@external(erlang, "glua_stdlib_ffi", "error")
+fn error_func() -> Value
+
+const non_error = "The error function returned a non error which should never happen! Please report this issue to the git repository."
+
 /// Invokes the Lua `error` function with the provided message.
-pub fn error(message: String) -> Action(List(Value), e) {
-  call_function_by_name(["error"], [string(message)])
+pub fn error(message: String) -> Action(a, e) {
+  use state <- Action
+  case call_function(error_func(), [string(message)]).function(state) {
+    Ok(_) -> panic as non_error
+    Error(e) -> Error(e)
+  }
 }
 
 /// Invokes the Lua `error` function with the provided message and level.
-pub fn error_with_level(message: String, level: Int) -> Action(List(Value), e) {
-  call_function_by_name(["error"], [string(message), int(level)])
+pub fn error_with_level(message: String, level: Int) -> Action(a, e) {
+  use state <- Action
+  case
+    call_function(error_func(), [string(message), int(level)]).function(state)
+  {
+    Ok(_) -> panic as non_error
+    Error(e) -> Error(e)
+  }
 }
 
 /// Transforms the return value of an `Action` with the provided function.
