@@ -541,10 +541,19 @@ pub fn table(values: List(#(Value, Value))) -> Action(Value, e) {
   Ok(do_table(values, state) |> pair.swap)
 }
 
+pub fn table_list(values: List(Value)) -> Action(Value, e) {
+  let #(_idx, values) =
+    list.map_fold(values, 1, fn(acc, val) { #(acc + 1, #(int(acc), val)) })
+
+  table(values)
+}
+
 @external(erlang, "luerl_heap", "alloc_table")
 fn do_table(values: List(#(Value, Value)), lua: Lua) -> #(Value, Lua)
 
 /// A decoder for list-style Lua tables.
+/// This decoder works similarly to ipairs in the sense that it stops
+/// when there is a gap in the table list.
 ///
 /// ## Examples
 ///
@@ -555,10 +564,25 @@ fn do_table(values: List(#(Value, Value)), lua: Lua) -> #(Value, Lua)
 /// |> glua.run(glua.new(), _)
 /// // -> Ok([1, 2, 3])
 /// ```
+///
+/// ```gleam
+/// glua.eval("return { [1] = 'a', [2] = 'b', [4] = 'd'}")
+/// |> glua.try(list.first)
+/// |> glua.returning(glua.table_list_decoder(decode.string))
+/// |> glua.run(glua.new(), _)
+/// // -> Ok(["a", "b"])
+/// ```
 pub fn table_list_decoder(
   inner decoder: decode.Decoder(a),
 ) -> decode.Decoder(List(a)) {
-  decode.dict(decode.int, decoder) |> decode.map(dict.values)
+  decode.dict(decode.int, decoder) |> decode.map(list_loop(_, [], 1))
+}
+
+fn list_loop(dict: dict.Dict(Int, a), acc: List(a), idx: Int) {
+  case dict.get(dict, idx) {
+    Ok(it) -> list_loop(dict, [it, ..acc], idx + 1)
+    Error(Nil) -> list.reverse(acc)
+  }
 }
 
 /// Encodes a Gleam function into a Lua function.
