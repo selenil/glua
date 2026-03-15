@@ -542,10 +542,10 @@ pub fn table(values: List(#(Value, Value))) -> Action(Value, e) {
 }
 
 pub fn table_list(values: List(Value)) -> Action(Value, e) {
-  use state <- Action
   let #(_idx, values) =
     list.map_fold(values, 1, fn(acc, val) { #(acc + 1, #(int(acc), val)) })
-  Ok(do_table(values, state) |> pair.swap)
+
+  table(values)
 }
 
 @external(erlang, "luerl_heap", "alloc_table")
