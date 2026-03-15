@@ -43,6 +43,13 @@ pub fn get_table_test() {
 }
 
 pub fn table_list_test() {
+  let list =
+    glua.eval("return { [1] = 'a', [2] = 'b', [4] = 'd'}")
+    |> glua.try(list.first)
+    |> glua.returning(glua.table_list_decoder(decode.string))
+    |> glua.run(glua.new(), _)
+  assert list == Ok(["a", "b"])
+
   let list = ["foo", "bar", "baz", "qux"]
   let assert Ok(Nil) =
     glua.run(glua.new(), {

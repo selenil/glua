@@ -552,6 +552,8 @@ pub fn table_list(values: List(Value)) -> Action(Value, e) {
 fn do_table(values: List(#(Value, Value)), lua: Lua) -> #(Value, Lua)
 
 /// A decoder for list-style Lua tables.
+/// This decoder works similarly to ipairs in the sense that it stops
+/// when there is a gap in the table list.
 ///
 /// ## Examples
 ///
@@ -561,6 +563,14 @@ fn do_table(values: List(#(Value, Value)), lua: Lua) -> #(Value, Lua)
 /// |> glua.returning(glua.table_list_decoder(decode.int))
 /// |> glua.run(glua.new(), _)
 /// // -> Ok([1, 2, 3])
+/// ```
+///
+/// ```gleam
+/// glua.eval("return { [1] = 'a', [2] = 'b', [4] = 'd'}")
+/// |> glua.try(list.first)
+/// |> glua.returning(glua.table_list_decoder(decode.string))
+/// |> glua.run(glua.new(), _)
+/// // -> Ok(["a", "b"])
 /// ```
 pub fn table_list_decoder(
   inner decoder: decode.Decoder(a),
