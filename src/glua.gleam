@@ -1197,7 +1197,7 @@ pub fn call_function_by_name(
 ///   use mt <- glua.then(glua.table([#(glua.string("__index"), glua.function(fun))]))
 ///   use _ <- glua.then(glua.call_function(lib.set_metatable(), [tbl, mt]))
 ///
-///   glua.index(tbl, "a_key") |> glua.returning(decode.string)
+///   glua.index(tbl, glua.string("a_key")) |> glua.returning(decode.string)
 /// })
 /// // -> Ok("fixed value")
 /// ```
@@ -1228,7 +1228,7 @@ fn do_index(
 ///   use mt <- glua.then(glua.table([#(glua.string("__newindex"), glua.function(fun))]))
 ///   use _ <- glua.then(glua.call_function(lib.set_metatable(), [tbl, mt]))
 ///
-///   glua.new_index(tbl, "my_new_key", glua.string("my_new_value"))
+///   glua.new_index(tbl, glua.string("my_new_key"), glua.string("my_new_value"))
 /// })
 /// // -> Error(glua.LuaRuntimeException(
 ///   exception: glua.ErrorCall("this is a read-only table", option.None),
