@@ -6,7 +6,7 @@ A library for embedding Lua in Gleam applications!
 [![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/glua/)
 
 ```sh
-gleam add glua@2
+gleam add glua
 ```
 
 ## Usage
