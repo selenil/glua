@@ -6,7 +6,7 @@ A library for embedding Lua in Gleam applications!
 [![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/glua/)
 
 ```sh
-gleam add glua@1
+gleam add glua
 ```
 
 ## Usage
@@ -21,12 +21,10 @@ end
 
 return greet()
 "
-
-let assert Ok(#(_state, [result])) = glua.eval(
-  state: glua.new(),
-  code:,
-  using: decode.string
-)
+let assert Ok([result]) =
+  glua.eval(code:)
+  |> glua.returning_multi(decode.string)
+  |> glua.run(glua.new(), _)
 
 assert result == "Hello from Lua!"
 ```
@@ -35,9 +33,12 @@ assert result == "Hello from Lua!"
 
 ```gleam
 let code = "return 'this is a chunk of Lua code'"
-let assert Ok(#(state, chunk)) = glua.load(state: glua.new(), code:)
-let assert Ok(#(_state, [result])) =
-  glua.eval_chunk(state:, chunk:, using: decode.string)
+
+let assert Ok([result]) =
+  glua.load(code:)
+  |> glua.then(glua.eval_chunk)
+  |> glua.returning_multi(decode.string)
+  |> glua.run(glua.new(), _)
 
 assert result == "this is a chunk of Lua code"
 ```
@@ -45,11 +46,10 @@ assert result == "this is a chunk of Lua code"
 ### Executing Lua files
 
 ```gleam
-let assert Ok(#(_state, [n, m])) = glua.eval_file(
-  state: glua.new(),
-  path: "./my_lua_files/two_numbers.lua"
-  using: decode.int
-)
+let assert Ok([n, m]) =
+  glua.eval_file(path: "./my_lua_files/two_numbers.lua")
+  |> glua.returning_multi(decode.int)
+  |> glua.run(glua.new(), _)
 
 assert n == 1 && m == 2
 ```
@@ -58,11 +58,11 @@ assert n == 1 && m == 2
 
 ```gleam
 let assert Ok(lua) = glua.new() |> glua.sandbox(["os", "execute"])
-let assert Error(glua.LuaRuntimeException(exception, _)) = glua.eval(
-  state: lua,
-  code: "os.execute('rm -f important_file'); return 0",
-  using: decode.int
-)
+let assert Error(glua.LuaRuntimeException(exception, _)) =
+  glua.run(
+    glua.new(),
+    glua.eval(code: "os.execute('rm -f important_file'); return 0"),
+  )
 
 // 'important_file' was not deleted
 assert exception == glua.ErrorCall(["os.execute is sandboxed"])
@@ -71,11 +71,10 @@ assert exception == glua.ErrorCall(["os.execute is sandboxed"])
 ### Getting values from Lua
 
 ```gleam
-let assert Ok(version) = glua.get(
-  state: glua.new(),
-  keys: ["_VERSION"],
-  using: decode.string
-)
+let assert Ok(version) =
+  glua.get(keys: ["_VERSION"])
+  |> glua.returning(decode.string)
+  |> glua.run(glua.new(), _)
 
 assert version == "Lua 5.3"
 ```
@@ -84,125 +83,102 @@ assert version == "Lua 5.3"
 
 ```gleam
 // we need to encode any value we want to pass to Lua
-let #(lua, encoded) = glua.string(glua.new(), "my_value")
+let value = glua.string("my_value")
 
 // `keys` is the full path to where the value will be set
 // and any intermediate table will be created if it is not present
 let keys = ["my_table", "my_value"]
-let assert Ok(lua) = glua.set(state: lua, keys:, value: encoded)
 
-// now we can get the value
-let assert Ok(value) = glua.get(state: lua, keys:, using: decode.string)
+let action = {
+  use _ <- glua.then(glua.set(keys, value))
 
-// or return it from a Lua script
-let assert Ok(#(_lua, [returned])) =
-    glua.eval(
-      state: lua,
-      code: "return my_table.my_value",
-      using: decode.string,
-    )
+  // now we can get the value
+  use value1 <- glua.then(
+    glua.get(keys) |> glua.returning(decode.string)
+  )
 
-assert value == "my_value"
-assert returned == "my_value"
+  // or return it from a Lua script
+  use value2 <- glua.then(
+    glua.eval(code: "return my_table.my_value") |> glua.returning(decode.string)
+  )
+
+  glua.success([value1, value2])
+}
+
+let assert Ok([v1, v2]) = glua.run(glua.new(), action)
+assert v1 == "my_value"
+assert v2 == v1
 ```
 
 ```gleam
 // we can also encode a list of tuples as a table to set it in Lua
-let my_table = [
-  #("my_first_value", 1.2),
-  #("my_second_value", 2.1)
-]
+let my_table =
+  [#("my_first_value", 1.2), #("my_second_value", 2.1)]
+  |> list.map(fn(pair) { #(glua.string(pair.0), glua.float(pair.1)) })
 
-// the function we use to encode the keys and the function we use to encode the values
-let encoders = #(glua.string, glua.float)
+let action = {
+  use tbl <- glua.then(glua.table(my_table))
+  use _ <- glua.then(glua.set(["my_table"], tbl))
 
-let #(lua, encoded) = glua.new() |> glua.table(encoders, my_table)
-let assert Ok(lua) = glua.set(state: lua, keys: ["my_table"], value: encoded)
+  // now we can get its values
+  glua.eval(code: "return my_table.my_second_value")
+  |> glua.returning_multi(decode.float)
+}
 
-// now we can get its values
-let assert Ok(#(lua, [result])) = glua.eval(
-  state: lua,
-  code: "return my_table.my_second_value",
-  using: decode.float
-)
-
+let assert Ok([result]) = glua.run(glua.new(), action)
 assert result == 2.1 
-
-// or we can get the whole table and decode it back to a list of tuples
-assert glua.get(
-  state: lua,
-  keys: ["my_table"],
-  using: glua.table_decoder(decode.string, decode.float)
-) == Ok([
-  #("my_first_value", 1.2),
-  #("my_second_value", 2.1)
-])
 ```
 
 ### Calling Lua functions from Gleam
 
 ```gleam
-// here we use `ref_get` instead of `get` because we need a reference to the function
-// and not a decoded value
-let lua = glua.new()
-let assert Ok(fun) = glua.ref_get(
-  state: lua,
-  keys: ["math", "max"]
-)
-
 // we need to encode each argument we pass to a Lua function
-// `glua.list` encodes a list of values using a single encoder function
-let #(lua, args) = glua.list(lua, glua.int, [1, 20, 7, 18])
+let args = list.map([1, 20, 7, 18], glua.int)
 
-let assert Ok(#(lua, [result])) = glua.call_function(
-  state: lua,
-  ref: fun,
-  args:,
-  using: decode.int
-)
+let action = {
+  use fun <- glua.then(
+    glua.get(["math", "max"])
+  )
 
+  glua.call_function(fun, args)
+  |> glua.returning_multi(decode.int)
+}
+
+let assert Ok([result]) = glua.run(glua.new(), action)
 assert result == 20
 
-// `glua.call_function_by_name` is a shorthand for `glua.ref_get` followed by `glua.call_function`
-let assert Ok(#(_lua, [result])) = glua.call_function_by_name(
-  state: lua,
-  keys: ["math", "max"],
-  args:,
-  using: decode.int
-)
-
+// `glua.call_function_by_name` is a shorthand for `glua.get` followed by `glua.call_function`
+let assert Ok([result]) =
+  glua.run(glua.new(), glua.call_function_by_name(["math", "max"], args))
 assert result == 20
 ```
 
 ### Exposing Gleam functions to Lua
 
 ```gleam
-let #(lua, fun) = {
-  use lua, args <- glua.function(glua.new())
-
-  let assert [x, min, max] = args
-  let assert Ok([x, min, max]) = list.try_map(
-    [x, min, max],
-    decode.run(_, decode.float)
+let fun = fn(args: List(glua.Value)) {
+  use args <- glua.then(
+    glua.fold(args, glua.dereference(_, decode.float))
   )
+  let assert [x, min, max] = args
 
   let result = float.clamp(x, min, max)
-
-  glua.list(lua, glua.float, [result])
+  glua.success([glua.float(result)])
 }
+|> glua.function
 
 let keys = ["my_functions", "clamp"]
 
-let assert Ok(lua) = glua.set(state: lua, keys:, value: fun)
+let args = list.map([2.3, 1.2, 2.1], glua.float)
 
-let #(lua, args) = glua.list(lua, glua.float, [2.3, 1.2, 2.1])
-let assert Ok(#(_lua, [result])) = glua.call_function_by_name(
-  state: lua,
-  keys:,
-  args:,
-  using: decode.float
-)
+let action = {
+  use _ <- glua.then(glua.set(keys, fun))
 
+  glua.call_function_by_name(keys, args)
+  |> glua.returning_multi(decode.float)
+}
+
+let assert Ok([result]) = glua.run(glua.new(), action)
 assert result == 2.1
 ```
 
