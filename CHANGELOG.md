@@ -1,5 +1,9 @@
 # Changelog
 
+## [v2.0.0]
+
+- [glua] Added a `gc` function to manually run the garbage collector on a Lua state.
+
 ## [v2.0.0-rc.1] - 2026-03-16
 
 - [glua] Changed encoders functions to not accept and return a Lua VM when is not needed.
