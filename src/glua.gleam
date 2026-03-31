@@ -839,6 +839,10 @@ pub fn sandbox(state lua: Lua, keys keys: List(String)) -> Result(Lua, Error(e))
 @external(erlang, "glua_ffi", "sandbox_fun")
 fn sandbox_fun(msg: String) -> Value
 
+/// Runs the garbage collector on the given Lua state.
+@external(erlang, "luerl", "gc")
+pub fn gc(state lua: Lua) -> Lua
+
 /// Gets a value in the Lua environment.
 ///
 /// ## Examples
