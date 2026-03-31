@@ -1,6 +1,6 @@
 name = "glua"
 target = "erlang"
-version = "2.0.0-rc.1"
+version = "2.0.0"
 
 description = "A library for embedding Lua in Gleam applications"
 licences = ["Apache-2.0"]

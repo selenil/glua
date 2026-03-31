@@ -1,6 +1,6 @@
 # Changelog
 
-## [v2.0.0]
+## [v2.0.0] - 2026-03-31
 
 - [glua] Added a `gc` function to manually run the garbage collector on a Lua state.
 
